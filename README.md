@@ -5,7 +5,7 @@
 
 
 
-# Enshrouded Dedicated Server — Automated Docker Deployment
+# Enshrouded Dedicated Server | Automated Docker Deployment
 
 > **Always up-to-date Enshrouded Dedicated Server, packaged as an immutable Docker image with runtime auto-updates via SteamCMD.**
 
@@ -64,11 +64,11 @@ Instead of baking a specific server version into the image, this container ships
 
 ## Why Docker Is the Right Tool Here
 
-Docker provides reproducibility by ensuring every server instance starts from the **same known-good environment** — same OS, same dependencies, same startup logic — eliminating “it worked on my machine” issues. The container follows **immutable infrastructure** principles: no in-place OS changes, no snowflake servers, and no configuration drift. All state lives **only** in mounted volumes.
+Docker provides reproducibility by ensuring every server instance starts from the **same known-good environment** - same OS, same dependencies, same startup logic - eliminating “it worked on my machine” issues. The container follows **immutable infrastructure** principles: no in-place OS changes, no snowflake servers, and no configuration drift. All state lives **only** in mounted volumes.
 
 Docker also enables a **clean separation of concerns**: the image handles runtime dependencies and automation logic, volumes store world data and logs, and environment variables control behavior and tuning. This mirrors how real production workloads are deployed.
 
-When Enshrouded releases an update, upgrades are safe and trivial: restart the container, SteamCMD pulls the latest build, and the server starts on the new version automatically — no rebuild pipelines, no guesswork.
+When Enshrouded releases an update, upgrades are safe and trivial: restart the container, SteamCMD pulls the latest build, and the server starts on the new version automatically - no rebuild pipelines, no guesswork.
 
 ---
 
