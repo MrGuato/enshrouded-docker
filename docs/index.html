@@ -2,122 +2,62 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Enshrouded Dedicated Server — Automated Docker Deployment</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
+  <title>Enshrouded Dedicated Server | Docker + DevOps</title>
   <meta name="description"
-        content="Production-style Enshrouded dedicated server using Docker with SteamCMD runtime auto-updates, immutable infrastructure, and persistent volumes." />
+        content="Production-style Enshrouded dedicated server using Docker with SteamCMD auto-updates, immutable infrastructure, and persistent volumes." />
 
   <link rel="stylesheet" href="assets/style.css" />
 </head>
 
 <body>
-  <header class="wrap hero">
+  <header class="hero">
+    <div class="container">
+      <p class="eyebrow">Docker · DevOps · Automation</p>
+      <h1>Enshrouded Dedicated Server</h1>
+      <p class="lead">
+        A production-minded Enshrouded dedicated server built with Docker.
+        Always up to date via runtime SteamCMD updates — no rebuilds, no drift.
+      </p>
 
-    <div class="badge-row">
-      <span class="chip">Docker</span>
-      <span class="chip">GHCR</span>
-      <span class="chip">GitHub Actions</span>
-      <span class="chip">SteamCMD Auto-Update</span>
-      <span class="chip">Non-root</span>
-    </div>
-
-    <h1>Enshrouded Dedicated Server</h1>
-
-    <p class="sub">
-      Always up-to-date Enshrouded Dedicated Server packaged as an immutable Docker image.
-      Runtime SteamCMD updates ensure the latest server version without rebuilds.
-      Built with a production mindset: automation-first, reproducible, and persistent.
-    </p>
-
-    <div class="cta-row">
-      <a class="btn primary" href="guide">Read the Guide</a>
-      <a class="btn"
-         href="https://github.com/MrGuato/enshrouded-docker"
-         target="_blank"
-         rel="noreferrer">View on GitHub</a>
-      <a class="btn"
-         href="https://github.com/MrGuato/enshrouded-docker/pkgs/container"
-         target="_blank"
-         rel="noreferrer">GHCR Package</a>
-    </div>
-
-    <div class="card">
-      <div class="card-title">Quick Start</div>
-
-      <div class="mono">
-        <div class="code-label">Pull image</div>
-        <pre><code>docker pull ghcr.io/mrguato/enshrouded-docker:latest</code></pre>
-
-        <div class="code-label">Start server</div>
-        <pre><code>docker compose up -d</code></pre>
+      <div class="badges">
+        <span>Docker</span>
+        <span>GHCR</span>
+        <span>GitHub Actions</span>
+        <span>SteamCMD</span>
+        <span>Non-root</span>
       </div>
 
-      <p class="hint">
-        See the full Docker Compose example, port configuration, and persistence model in the guide.
-      </p>
+      <div class="actions">
+        <a class="btn primary" href="guide">Read the Guide</a>
+        <a class="btn" href="https://github.com/MrGuato/enshrouded-docker" target="_blank">GitHub</a>
+        <a class="btn" href="https://github.com/MrGuato/enshrouded-docker/pkgs/container" target="_blank">GHCR Image</a>
+      </div>
     </div>
-
   </header>
 
-  <main class="wrap grid">
+  <main class="container">
 
     <section class="card">
-      <div class="card-title">Why This Container</div>
+      <h2>Why This Exists</h2>
       <p>
-        Most Enshrouded server setups drift, go stale, or require rebuilds whenever Steam releases an update.
-        This container keeps the image immutable and updates the server binaries at runtime via SteamCMD.
+        Most Enshrouded server setups rely on manual installs or brittle Docker images
+        that fall behind whenever Steam ships an update.
+      </p>
+      <p>
+        This project keeps the container immutable and updates the server binaries
+        at runtime using SteamCMD.
       </p>
       <ul>
-        <li>Runtime <span class="mono-inline">steamcmd +app_update 2278520 validate</span></li>
-        <li>No broken <span class="mono-inline">latest</span> tags</li>
-        <li>Persistent saves, logs, and config via volumes</li>
+        <li>No broken <code>latest</code> tags</li>
+        <li>No manual updates</li>
+        <li>No image rebuilds for game patches</li>
       </ul>
     </section>
 
     <section class="card">
-      <div class="card-title">DevOps Signals</div>
-      <ul>
-        <li>CI/CD builds and publishes images to GHCR</li>
-        <li>Reproducible deployments using Docker Compose</li>
-        <li>Automation-first entrypoint design</li>
-        <li>Runs as a non-root container user</li>
-      </ul>
-    </section>
+      <h2>Quick Start</h2>
 
-    <section class="card">
-      <div class="card-title">Security Posture</div>
-      <ul>
-        <li>No privileged containers</li>
-        <li>Only required UDP ports exposed</li>
-        <li>State isolated to mounted volumes</li>
-      </ul>
-    </section>
-
-    <section class="card">
-      <div class="card-title">Project Links</div>
-      <ul>
-        <li><a href="guide">Installation & Troubleshooting Guide</a></li>
-        <li>
-          <a href="https://github.com/MrGuato/enshrouded-docker/actions"
-             target="_blank"
-             rel="noreferrer">Build Pipeline (GitHub Actions)</a>
-        </li>
-        <li>
-          <a href="https://github.com/MrGuato/enshrouded-docker/pkgs/container"
-             target="_blank"
-             rel="noreferrer">Container Registry (GHCR)</a>
-        </li>
-      </ul>
-    </section>
-
-  </main>
-
-  <footer class="wrap footer">
-    <p class="muted">
-      Treat game servers like production services: automated, reproducible, observable, and easy to operate.
-    </p>
-  </footer>
-
-</body>
-</html>
+      <p>Pull the image:</p>
+      <pre><code>docker pull ghcr.io/mrguato/enshrouded-docker:latest</code></pre>
