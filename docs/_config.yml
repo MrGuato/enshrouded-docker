@@ -1,0 +1,4 @@
+title: Enshrouded Dedicated Server — Automated Docker Deployment
+description: Automated Enshrouded dedicated server using Docker with SteamCMD auto-updates, immutable infrastructure, and persistent volumes.
+theme: null
+markdown: kramdown
