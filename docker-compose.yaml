@@ -1,0 +1,17 @@
+services:
+  enshrouded:
+    build: .
+    container_name: enshrouded
+    restart: unless-stopped
+    ports:
+      - "15637:15637/udp"
+      - "27015:27015/udp"
+    environment:
+      - UPDATE_ON_START=1
+      - SERVER_NAME=JD's Enshrouded
+      - SERVER_SLOTS=16
+      # - SERVER_PASSWORD=ChangeMe
+      - PORT=15637
+      - STEAM_PORT=27015
+    volumes:
+      - ./data:/home/steam/enshrouded
