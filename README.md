@@ -1,4 +1,5 @@
 [![Made With Love](https://img.shields.io/badge/Made%20with%20%E2%9D%A4%EF%B8%8F-by%20Jonathan-red)](https://github.com/MrGuato)
+[![pages-build-deployment](https://github.com/MrGuato/enshrouded-docker/actions/workflows/pages/pages-build-deployment/badge.svg)](https://github.com/MrGuato/enshrouded-docker/actions/workflows/pages/pages-build-deployment)
 [![GHCR](https://img.shields.io/badge/GHCR-container%20registry-blue)](https://github.com/<your-username>/<repo>/pkgs/container)
 ![Visitors](https://visitor-badge.laobi.icu/badge?page_id=<your-username>.<repo>)
 
