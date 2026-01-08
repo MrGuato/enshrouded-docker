@@ -73,7 +73,12 @@ cd "${EN_DIR}"
 
 # Wine needs an X server; use Xvfb for headless
 exec gosu steam bash -lc "
+  set -e
   Xvfb :0 -screen 0 1024x768x16 >/dev/null 2>&1 &
   export DISPLAY=:0
-  wine64 enshrouded_server.exe
+
+  echo '[=] Wine binary:' \$(command -v wine || true)
+  wine --version
+
+  exec wine enshrouded_server.exe
 "
