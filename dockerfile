@@ -6,23 +6,13 @@ ENV DEBIAN_FRONTEND=noninteractive \
     WINEPREFIX=/home/steam/.wine \
     WINEDEBUG=-all
 
-# Install deps + Wine (Jammy supports i386 multiarch)
-RUN set -eux; \
-    dpkg --add-architecture i386; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends \
-      ca-certificates curl wget unzip \
-      tini gosu \
-      xvfb \
-      winbind \
-      wine \
-      wine32 \
-      lib32gcc-s1 \
-      lib32stdc++6 \
-    ; \
-    command -v wine; \
-    wine --version; \
-    rm -rf /var/lib/apt/lists/*
+# Install Wine and dependencies
+RUN dpkg --add-architecture i386 && apt-get update && apt-get install -y \
+    ca-certificates curl wget unzip tini gosu \
+    wine64 wine32 \
+    xvfb \
+    lib32gcc-s1 lib32stdc++6 \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install SteamCMD
 RUN mkdir -p ${STEAMCMDDIR} && \
@@ -31,8 +21,7 @@ RUN mkdir -p ${STEAMCMDDIR} && \
 
 # Create unprivileged user
 RUN useradd -m -u 10000 -s /bin/bash steam && \
-    mkdir -p ${EN_DIR} && \
-    chown -R steam:steam /home/steam ${STEAMCMDDIR}
+    mkdir -p ${EN_DIR} && chown -R steam:steam /home/steam ${STEAMCMDDIR}
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
