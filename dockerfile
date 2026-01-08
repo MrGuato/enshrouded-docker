@@ -22,7 +22,7 @@ RUN dpkg --add-architecture i386 && \
     && rm -rf /var/lib/apt/lists/*
 
 # Hard fail early if wine isn't present (prevents "built but broken" images)
-RUN command -v wine64 && wine64 --version
+RUN command -v wine && wine --version
 
 # Install SteamCMD
 RUN mkdir -p ${STEAMCMDDIR} && \
