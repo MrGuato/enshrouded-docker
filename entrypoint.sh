@@ -12,19 +12,18 @@ SERVER_SLOTS="${SERVER_SLOTS:-16}"
 SERVER_PASSWORD="${SERVER_PASSWORD:-}"
 UPDATE_ON_START="${UPDATE_ON_START:-1}"
 
-# New toggles
+# Toggles
 FORCE_CONFIG_REWRITE="${FORCE_CONFIG_REWRITE:-0}"   # 1 = always rewrite JSON from env
 RESET_WINEPREFIX="${RESET_WINEPREFIX:-0}"           # 1 = delete and recreate WINEPREFIX on boot
 
 WINEPREFIX="${WINEPREFIX:-/home/steam/.wine}"
+WINEARCH="${WINEARCH:-win64}"
+WINEDEBUG="${WINEDEBUG:--all}"
+XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/runtime-steam}"
 
-# Make sure perms are correct for mounted volumes
-mkdir -p "${EN_DIR}"
-chown -R steam:steam "${EN_DIR}"
-
-# Make sure Wine prefix is sane
-mkdir -p "${WINEPREFIX}"
-chown -R steam:steam "${WINEPREFIX}"
+# ---- preflight dirs + perms (host volumes often come in root-owned) ----
+mkdir -p "${EN_DIR}" "${WINEPREFIX}"
+chown -R steam:steam "${EN_DIR}" "${WINEPREFIX}" || true
 
 update_server() {
   echo "[+] Updating Enshrouded dedicated server via SteamCMD (AppID: ${APP_ID})..."
@@ -53,7 +52,7 @@ write_config_from_env() {
   "slotCount": ${SERVER_SLOTS}
 }
 EOF
-  chown steam:steam "${cfg}"
+  chown steam:steam "${cfg}" || true
 }
 
 write_config_if_missing() {
@@ -69,10 +68,13 @@ apply_env_overrides() {
   local cfg="${EN_DIR}/enshrouded_server.json"
   [[ -f "${cfg}" ]] || return
 
-  # If you want env vars to always override even when JSON exists,
-  # keep FORCE_CONFIG_REWRITE=1 OR do this patching.
-  echo "[+] Applying env overrides to ${cfg} (if set)..."
+  # Only patch if python3 exists; otherwise skip safely
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "[!] python3 not found; skipping env override patching"
+    return
+  fi
 
+  echo "[+] Applying env overrides to ${cfg} (if set)..."
   python3 - "$cfg" <<'PY'
 import json, os, sys
 
@@ -99,20 +101,23 @@ with open(cfg, "w", encoding="utf-8") as f:
     f.write("\n")
 PY
 
-  chown steam:steam "${cfg}"
+  chown steam:steam "${cfg}" || true
 }
 
 ensure_appid_file() {
-  echo "1203620" > "${EN_DIR}/steam_appid.txt"
-  chown steam:steam "${EN_DIR}/steam_appid.txt"
+  # IMPORTANT: match the APP_ID you installed
+  echo "${APP_ID}" > "${EN_DIR}/steam_appid.txt"
+  chown steam:steam "${EN_DIR}/steam_appid.txt" || true
 }
 
+# ---- do update ----
 if [[ "${UPDATE_ON_START}" == "1" ]]; then
   update_server
 else
   echo "[=] UPDATE_ON_START=0 — skipping SteamCMD update"
 fi
 
+# ---- config ----
 write_config_if_missing
 apply_env_overrides
 ensure_appid_file
@@ -121,22 +126,25 @@ echo "[+] Starting Enshrouded server..."
 cd "${EN_DIR}"
 
 exec gosu steam bash -lc "
-  set -e
+  set -euo pipefail
 
   export WINEPREFIX='${WINEPREFIX}'
-  export WINEDEBUG='-all'
-  export XDG_RUNTIME_DIR=/tmp/runtime-steam
-  mkdir -p \$XDG_RUNTIME_DIR
-  chmod 700 \$XDG_RUNTIME_DIR
+  export WINEARCH='${WINEARCH}'
+  export WINEDEBUG='${WINEDEBUG}'
+  export XDG_RUNTIME_DIR='${XDG_RUNTIME_DIR}'
+  mkdir -p \"\$XDG_RUNTIME_DIR\"
+  chmod 700 \"\$XDG_RUNTIME_DIR\"
 
+  # If requested, reset prefix SAFELY (kill wineserver first)
   if [[ '${RESET_WINEPREFIX}' == '1' ]]; then
-    echo '[!] RESET_WINEPREFIX=1 — resetting Wine prefix'
+    echo '[!] RESET_WINEPREFIX=1 — resetting Wine prefix (safe)'
+    wineserver -k || true
     rm -rf \"\$WINEPREFIX\"
     mkdir -p \"\$WINEPREFIX\"
   fi
 
   # Ensure ownership (important if volume/previous runs created root-owned files)
-  chown -R steam:steam \"\$WINEPREFIX\"
+  chown -R steam:steam \"\$WINEPREFIX\" || true
 
   # Headless X server for Wine
   Xvfb :0 -screen 0 1024x768x16 >/dev/null 2>&1 &
@@ -145,8 +153,17 @@ exec gosu steam bash -lc "
   echo '[=] Wine binary:' \$(command -v wine || true)
   wine --version
 
-  # Initialize prefix (creates kernel32/etc) - prevents some c0000135 situations
-  wineboot -u || true
+  # Idempotent prefix initialization (mbround-style behavior)
+  INIT_MARKER=\"\$WINEPREFIX/.initialized\"
+  if [[ ! -f \"\$INIT_MARKER\" ]]; then
+    echo '[+] First run: initializing Wine prefix...'
+    wineserver -k || true
+    wineboot -u || true
+    wineserver -w || true
+    touch \"\$INIT_MARKER\"
+  else
+    echo '[=] Wine prefix already initialized.'
+  fi
 
   exec wine enshrouded_server.exe
 "
