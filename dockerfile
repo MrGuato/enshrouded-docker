@@ -4,9 +4,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     STEAMCMDDIR=/opt/steamcmd \
     EN_DIR=/home/steam/enshrouded \
     WINEPREFIX=/home/steam/.wine \
-    WINEARCH=win64 \
-    WINEDEBUG=-all \
-    XDG_RUNTIME_DIR=/tmp/runtime-steam
+    WINEDEBUG=-all
 
 # Base deps + WineHQ repo + modern Wine
 RUN dpkg --add-architecture i386 && \
@@ -27,8 +25,7 @@ RUN mkdir -p ${STEAMCMDDIR} && \
 
 # Create unprivileged user
 RUN useradd -m -u 10000 -s /bin/bash steam && \
-    mkdir -p ${EN_DIR} ${WINEPREFIX} ${XDG_RUNTIME_DIR} && \
-    chown -R steam:steam /home/steam ${STEAMCMDDIR} ${EN_DIR} ${WINEPREFIX} ${XDG_RUNTIME_DIR}
+    mkdir -p ${EN_DIR} && chown -R steam:steam /home/steam ${STEAMCMDDIR} ${EN_DIR}
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
