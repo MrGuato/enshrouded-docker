@@ -1,41 +1,42 @@
-FROM ubuntu:22.04
+# This image is battle-tested for Wine game servers
+FROM cm2network/steamcmd:wine
 
-ENV DEBIAN_FRONTEND=noninteractive \
-    STEAMCMDDIR=/opt/steamcmd \
-    EN_DIR=/home/steam/enshrouded \
-    WINEPREFIX=/home/steam/.wine \
-    WINEDEBUG=-all
+LABEL maintainer="MrGuato"
+LABEL description="Enshrouded Dedicated Server with auto-updates"
 
-# Base deps + WineHQ repo + modern Wine
-RUN dpkg --add-architecture i386 && \
-    apt-get update && \
-    apt-get install -y wine64 wine32 xvfb cabextract
+# Environment variables with sensible defaults
+ENV STEAMAPPID=2278520 \
+    STEAMAPP=enshrouded \
+    EN_DIR=/home/steam/enshrouded-dedicated \
+    UPDATE_ON_START=1 \
+    WINEDEBUG=-all \
+    DISPLAY=:1.0
 
-RUN dpkg --add-architecture i386 && \
-    apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates curl wget unzip tini gosu gnupg2 software-properties-common \
-      xvfb winbind cabextract \
-    && mkdir -p /etc/apt/keyrings \
-    && wget -O /etc/apt/keyrings/winehq-archive.key https://dl.winehq.org/wine-builds/winehq.key \
-    && wget -NP /etc/apt/sources.list.d/ https://dl.winehq.org/wine-builds/ubuntu/dists/jammy/winehq-jammy.sources \
-    && apt-get update \
-    && apt-get install -y --install-recommends winehq-stable \
-    && rm -rf /var/lib/apt/lists/*
+# Server configuration defaults
+ENV SERVER_NAME="Enshrouded Docker Server" \
+    SERVER_SLOTS=16 \
+    SERVER_PASSWORD="" \
+    GAME_PORT=15637 \
+    QUERY_PORT=27015
 
+# Create game directory with proper permissions
+USER root
+RUN mkdir -p ${EN_DIR} && \
+    chown -R steam:steam ${EN_DIR}
 
-# Install SteamCMD
-RUN mkdir -p ${STEAMCMDDIR} && \
-    curl -fsSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
-      | tar -xz -C ${STEAMCMDDIR}
+# Copy entrypoint script
+COPY --chown=steam:steam entrypoint.sh /home/steam/entrypoint.sh
+RUN chmod +x /home/steam/entrypoint.sh
 
-# Create unprivileged user
-RUN useradd -m -u 10000 -s /bin/bash steam && \
-    mkdir -p ${EN_DIR} && chown -R steam:steam /home/steam ${STEAMCMDDIR} ${EN_DIR}
+# Switch back to steam user for security
+USER steam
+WORKDIR /home/steam
 
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-
+# Expose game ports
 EXPOSE 15637/udp 27015/udp
 
-ENTRYPOINT ["/usr/bin/tini","--"]
-CMD ["/entrypoint.sh"]
+# Health check to ensure server is running
+HEALTHCHECK --interval=60s --timeout=10s --start-period=120s --retries=3 \
+    CMD pgrep -f enshrouded_server.exe || exit 1
+
+ENTRYPOINT ["/home/steam/entrypoint.sh"]
