@@ -1,30 +1,44 @@
-# This image is battle-tested for Wine game servers
-FROM cm2network/steamcmd:wine
+FROM rouhim/steamcmd-wine:latest
 
 LABEL maintainer="MrGuato"
-LABEL description="Enshrouded Dedicated Server with auto-updates"
+LABEL description="Enshrouded Dedicated Server with auto-updates via SteamCMD"
+LABEL version="1.0"
 
-# Environment variables with sensible defaults
-ENV STEAMAPPID=2278520 \
-    STEAMAPP=enshrouded \
-    EN_DIR=/home/steam/enshrouded-dedicated \
-    UPDATE_ON_START=1 \
-    WINEDEBUG=-all \
-    DISPLAY=:1.0
+# ============================================================================
+# Environment Configuration
+# ============================================================================
 
-# Server configuration defaults
-ENV SERVER_NAME="Enshrouded Docker Server" \
-    SERVER_SLOTS=16 \
-    SERVER_PASSWORD="" \
-    GAME_PORT=15637 \
-    QUERY_PORT=27015
+# Steam App configuration
+ENV STEAM_APP_ID=2278520
+ENV STEAM_APP_NAME="enshrouded"
 
-# Create game directory with proper permissions
+# Server paths (rouhim base uses these standard paths)
+ENV SERVER_DIR="/home/steam/server"
+ENV SERVER_CONFIG_DIR="/home/steam/config"
+
+# Server configuration defaults (user-customizable)
+ENV SERVER_NAME="Enshrouded Docker Server"
+ENV SERVER_SLOTS=16
+ENV SERVER_PASSWORD=""
+ENV GAME_PORT=15637
+ENV QUERY_PORT=27015
+ENV UPDATE_ON_START=1
+
+# Wine optimization
+ENV WINEDEBUG=-all
+
+# ============================================================================
+# Setup
+# ============================================================================
+
+# Switch to root to install any additional packages if needed
 USER root
-RUN mkdir -p ${EN_DIR} && \
-    chown -R steam:steam ${EN_DIR}
 
-# Copy entrypoint script
+# Create config directory
+RUN mkdir -p ${SERVER_CONFIG_DIR} && \
+    chown -R steam:steam ${SERVER_CONFIG_DIR}
+
+# Copy entrypoint and helper scripts
 COPY --chown=steam:steam entrypoint.sh /home/steam/entrypoint.sh
 RUN chmod +x /home/steam/entrypoint.sh
 
@@ -32,11 +46,27 @@ RUN chmod +x /home/steam/entrypoint.sh
 USER steam
 WORKDIR /home/steam
 
+# ============================================================================
+# Startup Command Configuration
+# ============================================================================
+
+# The rouhim base expects STARTUP_COMMAND to launch the server
+# We'll override this in entrypoint.sh for more control
+ENV STARTUP_COMMAND="wine64 ${SERVER_DIR}/enshrouded_server.exe"
+
+# ============================================================================
+# Network & Health
+# ============================================================================
+
 # Expose game ports
 EXPOSE 15637/udp 27015/udp
 
-# Health check to ensure server is running
-HEALTHCHECK --interval=60s --timeout=10s --start-period=120s --retries=3 \
+# Health check to verify server is running
+HEALTHCHECK --interval=60s --timeout=10s --start-period=180s --retries=3 \
     CMD pgrep -f enshrouded_server.exe || exit 1
+
+# ============================================================================
+# Entrypoint
+# ============================================================================
 
 ENTRYPOINT ["/home/steam/entrypoint.sh"]
