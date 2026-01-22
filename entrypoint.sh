@@ -1,152 +1,416 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-STEAMCMDDIR="${STEAMCMDDIR:-/opt/steamcmd}"
-EN_DIR="${EN_DIR:-/home/steam/enshrouded}"
-APP_ID="${APP_ID:-2278520}"
+# ============================================================================
+# Enshrouded Dedicated Server - Bulletproof Entrypoint Script
+# ============================================================================
+# Goals:
+# - Works even if base image paths/env vars differ (SteamCMD/WINEPREFIX)
+# - Avoids brittle assumptions (doesn't require username == "steam")
+# - Creates required directories safely
+# - Installs/updates via SteamCMD (anonymous) and validates install
+# - Starts Xvfb if needed and launches the server via Wine
+# ============================================================================
 
-PORT="${PORT:-15637}"
-STEAM_PORT="${STEAM_PORT:-27015}"
-SERVER_NAME="${SERVER_NAME:-Enshrouded Docker}"
-SERVER_SLOTS="${SERVER_SLOTS:-16}"
-SERVER_PASSWORD="${SERVER_PASSWORD:-}"
-UPDATE_ON_START="${UPDATE_ON_START:-1}"
+# ----------------------------
+# Pretty logging
+# ----------------------------
+readonly RED='\033[0;31m'
+readonly GREEN='\033[0;32m'
+readonly YELLOW='\033[1;33m'
+readonly BLUE='\033[0;34m'
+readonly CYAN='\033[0;36m'
+readonly NC='\033[0m'
 
-# New toggles
-FORCE_CONFIG_REWRITE="${FORCE_CONFIG_REWRITE:-0}"   # 1 = always rewrite JSON from env
-RESET_WINEPREFIX="${RESET_WINEPREFIX:-0}"           # 1 = delete and recreate WINEPREFIX on boot
+log()   { echo -e "${GREEN}[$(date +'%Y-%m-%d %H:%M:%S')]${NC} $*"; }
+warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
+error() { echo -e "${RED}[ERROR]${NC} $*" >&2; }
+info()  { echo -e "${BLUE}[INFO]${NC} $*"; }
+debug() { echo -e "${CYAN}[DEBUG]${NC} $*"; }
 
-WINEPREFIX="${WINEPREFIX:-/home/steam/.wine}"
+# ----------------------------
+# Defaults / Configuration
+# ----------------------------
+# App
+readonly STEAMAPPID="${STEAM_APP_ID:-2278520}"
 
-# Make sure perms are correct for mounted volumes
-mkdir -p "${EN_DIR}"
-chown -R steam:steam "${EN_DIR}"
+# Paths (match your Dockerfile defaults, but allow override)
+readonly SERVER_DIR="${SERVER_DIR:-/home/steam/server}"
+readonly CONFIG_DIR="${SERVER_CONFIG_DIR:-/home/steam/config}"
+readonly CONFIG_FILE="${CONFIG_DIR}/enshrouded_server.json"
+readonly SAVEGAME_DIR="${CONFIG_DIR}/savegame"
+readonly LOG_DIR="${CONFIG_DIR}/logs"
 
-# Make sure Wine prefix is sane
-mkdir -p "${WINEPREFIX}"
-chown -R steam:steam "${WINEPREFIX}"
+# Server settings
+readonly SERVER_NAME="${SERVER_NAME:-Enshrouded Docker Server}"
+readonly SERVER_SLOTS="${SERVER_SLOTS:-16}"
+readonly SERVER_PASSWORD="${SERVER_PASSWORD:-}"
+readonly GAME_PORT="${GAME_PORT:-15637}"
+readonly QUERY_PORT="${QUERY_PORT:-27015}"
+readonly UPDATE_ON_START="${UPDATE_ON_START:-1}"
 
-update_server() {
-  echo "[+] Updating Enshrouded dedicated server via SteamCMD (AppID: ${APP_ID})..."
-  gosu steam bash -lc "
-    ${STEAMCMDDIR}/steamcmd.sh \
-      +@sSteamCmdForcePlatformType windows \
-      +force_install_dir ${EN_DIR} \
-      +login anonymous \
-      +app_update ${APP_ID} validate \
-      +quit
-  "
+# Display settings
+readonly DISPLAY="${DISPLAY:-:99}"
+
+# Wine prefix (do not assume it exists in base image)
+# If already set by the base image, we respect it.
+readonly DEFAULT_WINEPREFIX="${WINEPREFIX:-${HOME:-/home/steam}/.wine}"
+export WINEPREFIX="${WINEPREFIX:-$DEFAULT_WINEPREFIX}"
+
+# ----------------------------
+# Helpers
+# ----------------------------
+print_banner() {
+  log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  log "   Enshrouded Dedicated Server - Docker Container"
+  log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  info "Steam AppID:           ${STEAMAPPID}"
+  info "Server Directory:      ${SERVER_DIR}"
+  info "Config Directory:      ${CONFIG_DIR}"
+  info "Wine Prefix:           ${WINEPREFIX}"
+  info "Display:               ${DISPLAY}"
+  log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 }
 
-write_config_from_env() {
-  local cfg="${EN_DIR}/enshrouded_server.json"
-  echo "[+] Writing ${cfg} from env..."
-  cat > "${cfg}" <<EOF
+# Resolve SteamCMD path robustly (no hard dependency on STEAMCMD_DIR)
+resolve_steamcmd() {
+  # 1) If STEAMCMD is explicitly provided (full path), trust it
+  if [[ -n "${STEAMCMD:-}" ]] && [[ -x "${STEAMCMD}" ]]; then
+    echo "${STEAMCMD}"
+    return 0
+  fi
+
+  # 2) If STEAMCMD_DIR provided, use it if valid
+  if [[ -n "${STEAMCMD_DIR:-}" ]] && [[ -x "${STEAMCMD_DIR}/steamcmd.sh" ]]; then
+    echo "${STEAMCMD_DIR}/steamcmd.sh"
+    return 0
+  fi
+
+  # 3) Try common locations across images
+  local p
+  for p in \
+    "/home/steam/steamcmd/steamcmd.sh" \
+    "/home/steam/Steam/steamcmd.sh" \
+    "/home/steam/steamcmd.sh" \
+    "/home/ubuntu/steamcmd/steamcmd.sh" \
+    "/home/ubuntu/Steam/steamcmd.sh" \
+    "/home/ubuntu/steamcmd.sh" \
+    "/opt/steamcmd/steamcmd.sh" \
+    "/usr/local/bin/steamcmd.sh" \
+    "/usr/bin/steamcmd.sh"
+  do
+    if [[ -x "$p" ]]; then
+      echo "$p"
+      return 0
+    fi
+  done
+
+  # 4) Last resort: bounded find
+  local found
+  found="$(find / -maxdepth 5 -type f -name steamcmd.sh -perm -111 2>/dev/null | head -n 1 || true)"
+  if [[ -n "${found}" ]]; then
+    echo "${found}"
+    return 0
+  fi
+
+  return 1
+}
+
+# Resolve Wine binary robustly (wine64 preferred, fallback to wine)
+resolve_wine() {
+  if command -v wine64 >/dev/null 2>&1; then
+    echo "wine64"
+    return 0
+  fi
+  if command -v wine >/dev/null 2>&1; then
+    echo "wine"
+    return 0
+  fi
+  return 1
+}
+
+# Xvfb existence check
+have_xvfb() {
+  command -v Xvfb >/dev/null 2>&1
+}
+
+# ----------------------------
+# Directory Management
+# ----------------------------
+create_directories() {
+  log "Creating directories..."
+  mkdir -p "${SERVER_DIR}" "${CONFIG_DIR}" "${SAVEGAME_DIR}" "${LOG_DIR}"
+  info "✓ Server directory:  ${SERVER_DIR}"
+  info "✓ Config directory:  ${CONFIG_DIR}"
+  info "✓ Savegame directory:${SAVEGAME_DIR}"
+  info "✓ Log directory:     ${LOG_DIR}"
+}
+
+# ----------------------------
+# Configuration Generation
+# ----------------------------
+generate_config() {
+  if [[ -f "${CONFIG_FILE}" ]]; then
+    info "Configuration file already exists: ${CONFIG_FILE}"
+    return 0
+  fi
+
+  log "Generating server configuration..."
+
+  # Ensure no JSON-breaking newlines (simple hardening)
+  local safe_name safe_pass
+  safe_name="${SERVER_NAME//$'\n'/ }"
+  safe_pass="${SERVER_PASSWORD//$'\n'/ }"
+
+  cat > "${CONFIG_FILE}" <<EOF
 {
-  "name": "${SERVER_NAME}",
-  "password": "${SERVER_PASSWORD}",
+  "name": "${safe_name}",
+  "password": "${safe_pass}",
   "saveDirectory": "./savegame",
   "logDirectory": "./logs",
   "ip": "0.0.0.0",
-  "gamePort": ${PORT},
-  "queryPort": ${STEAM_PORT},
+  "gamePort": ${GAME_PORT},
+  "queryPort": ${QUERY_PORT},
   "slotCount": ${SERVER_SLOTS}
 }
 EOF
-  chown steam:steam "${cfg}"
-}
 
-write_config_if_missing() {
-  local cfg="${EN_DIR}/enshrouded_server.json"
-  if [[ -f "${cfg}" && "${FORCE_CONFIG_REWRITE}" != "1" ]]; then
-    echo "[=] Found existing config: ${cfg}"
-    return
+  info "✓ Configuration generated successfully"
+  info "  Server Name: ${safe_name}"
+  info "  Max Players: ${SERVER_SLOTS}"
+  info "  Game Port:   ${GAME_PORT}"
+  info "  Query Port:  ${QUERY_PORT}"
+  if [[ -n "${SERVER_PASSWORD}" ]]; then
+    info "  Password:    Set (hidden)"
+  else
+    warn "  Password:    Not set (public server)"
   fi
-  write_config_from_env
 }
 
-apply_env_overrides() {
-  local cfg="${EN_DIR}/enshrouded_server.json"
-  [[ -f "${cfg}" ]] || return
+prepare_server_config() {
+  log "Preparing server configuration..."
 
-  # If you want env vars to always override even when JSON exists,
-  # keep FORCE_CONFIG_REWRITE=1 OR do this patching.
-  echo "[+] Applying env overrides to ${cfg} (if set)..."
+  # Keep canonical config in CONFIG_DIR, but ensure server dir has a copy
+  local server_config="${SERVER_DIR}/enshrouded_server.json"
+  if [[ -f "${CONFIG_FILE}" ]] && [[ ! -f "${server_config}" ]]; then
+    debug "Copying config into server directory"
+    cp "${CONFIG_FILE}" "${server_config}"
+  fi
 
-  python3 - "$cfg" <<'PY'
-import json, os, sys
-
-cfg = sys.argv[1]
-with open(cfg, "r", encoding="utf-8") as f:
-    data = json.load(f)
-
-def maybe_set(key, env_name, cast=None):
-    val = os.environ.get(env_name, "")
-    if val == "":
-        return
-    if cast:
-        val = cast(val)
-    data[key] = val
-
-maybe_set("name", "SERVER_NAME")
-maybe_set("password", "SERVER_PASSWORD")
-maybe_set("gamePort", "PORT", int)
-maybe_set("queryPort", "STEAM_PORT", int)
-maybe_set("slotCount", "SERVER_SLOTS", int)
-
-with open(cfg, "w", encoding="utf-8") as f:
-    json.dump(data, f, indent=2)
-    f.write("\n")
-PY
-
-  chown steam:steam "${cfg}"
+  info "✓ Server configuration ready"
 }
 
-ensure_appid_file() {
-  echo "1203620" > "${EN_DIR}/steam_appid.txt"
-  chown steam:steam "${EN_DIR}/steam_appid.txt"
+# ----------------------------
+# Xvfb Management
+# ----------------------------
+start_xvfb() {
+  if ! have_xvfb; then
+    warn "Xvfb not found; continuing without virtual display"
+    return 0
+  fi
+
+  log "Starting virtual display (Xvfb)..."
+
+  if pgrep -x "Xvfb" >/dev/null 2>&1; then
+    info "Xvfb already running"
+    return 0
+  fi
+
+  Xvfb "${DISPLAY}" -screen 0 1024x768x16 -nolisten tcp -ac &
+  local xvfb_pid=$!
+
+  sleep 2
+
+  if pgrep -x "Xvfb" >/dev/null 2>&1; then
+    info "✓ Xvfb started successfully on display ${DISPLAY}"
+    debug "Xvfb PID: ${xvfb_pid}"
+  else
+    error "Failed to start Xvfb"
+    return 1
+  fi
 }
 
-if [[ "${UPDATE_ON_START}" == "1" ]]; then
+# ----------------------------
+# SteamCMD Update/Install
+# ----------------------------
+update_server() {
+  if [[ "${UPDATE_ON_START}" != "1" ]]; then
+    warn "Auto-update disabled (UPDATE_ON_START != 1)"
+    warn "Server will start with existing installation"
+    return 0
+  fi
+
+  log "Updating/Installing Enshrouded Dedicated Server..."
+  info "Steam AppID:       ${STEAMAPPID}"
+  info "Install directory: ${SERVER_DIR}"
+
+  local steamcmd
+  steamcmd="$(resolve_steamcmd)" || {
+    error "SteamCMD not found (steamcmd.sh)."
+    error "Set STEAMCMD=/path/to/steamcmd.sh or STEAMCMD_DIR=/path/to/dir"
+    return 1
+  }
+  debug "SteamCMD resolved: ${steamcmd}"
+
+  # Run SteamCMD. Keep it as a single invocation to preserve logs.
+  "${steamcmd}" \
+    +@sSteamCmdForcePlatformType windows \
+    +force_install_dir "${SERVER_DIR}" \
+    +login anonymous \
+    +app_update "${STEAMAPPID}" validate \
+    +quit
+}
+
+# ----------------------------
+# Installation Verification
+# ----------------------------
+verify_installation() {
+  log "Verifying server installation..."
+  local server_exe="${SERVER_DIR}/enshrouded_server.exe"
+
+  if [[ ! -f "${server_exe}" ]]; then
+    error "Server executable not found: ${server_exe}"
+    error "SteamCMD may have failed or installed to a different directory."
+    return 1
+  fi
+
+  info "✓ Server executable verified"
+  debug "Location: ${server_exe}"
+
+  # Cross-platform stat (mac vs GNU)
+  local file_size
+  file_size="$(stat -c%s "${server_exe}" 2>/dev/null || stat -f%z "${server_exe}" 2>/dev/null || echo 0)"
+  if [[ "${file_size}" -gt 10000000 ]]; then
+    debug "File size: $((file_size / 1024 / 1024))MB (looks valid)"
+  else
+    warn "Server executable seems small: $((file_size / 1024))KB"
+  fi
+}
+
+# ----------------------------
+# Graceful Shutdown
+# ----------------------------
+graceful_shutdown() {
+  log "Received shutdown signal"
+  log "Stopping Enshrouded server gracefully..."
+
+  pkill -TERM -f enshrouded_server.exe >/dev/null 2>&1 || true
+
+  local count=0
+  while pgrep -f enshrouded_server.exe >/dev/null 2>&1 && [[ ${count} -lt 10 ]]; do
+    sleep 1
+    ((count++))
+  done
+
+  if pgrep -f enshrouded_server.exe >/dev/null 2>&1; then
+    warn "Server didn't stop gracefully, forcing shutdown..."
+    pkill -KILL -f enshrouded_server.exe >/dev/null 2>&1 || true
+  fi
+
+  pkill -TERM Xvfb >/dev/null 2>&1 || true
+
+  log "Server stopped successfully"
+  exit 0
+}
+
+# ----------------------------
+# Pre-flight Checks (bulletproof)
+# ----------------------------
+preflight_checks() {
+  log "Running pre-flight checks..."
+
+  # Do not allow root for safety; do not require username == steam (less brittle)
+  if [[ "$(id -u)" -eq 0 ]]; then
+    error "Refusing to run as root. Run the container as a non-root user."
+    return 1
+  fi
+  debug "✓ Running as non-root (uid=$(id -u), user=$(id -un))"
+
+  # Resolve wine binary
+  local wine_bin
+  wine_bin="$(resolve_wine)" || {
+    error "Wine not found in PATH"
+    return 1
+  }
+  debug "✓ Wine available: ${wine_bin}"
+
+  # SteamCMD sanity (only required if update is enabled)
+  if [[ "${UPDATE_ON_START}" == "1" ]]; then
+    local steamcmd
+    steamcmd="$(resolve_steamcmd)" || {
+      error "SteamCMD not found but UPDATE_ON_START=1"
+      error "Set STEAMCMD=/path/to/steamcmd.sh or STEAMCMD_DIR=/path/to/dir"
+      return 1
+    }
+    debug "✓ SteamCMD available: ${steamcmd}"
+  fi
+
+  # Initialize wine prefix if missing
+  if [[ ! -d "${WINEPREFIX}" ]]; then
+    warn "Wine prefix not initialized, creating: ${WINEPREFIX}"
+    mkdir -p "${WINEPREFIX}" || true
+  fi
+
+  # Try initializing wine prefix (non-fatal if base image handles it differently)
+  if command -v wineboot >/dev/null 2>&1; then
+    if [[ ! -f "${WINEPREFIX}/system.reg" ]]; then
+      warn "Initializing Wine prefix with wineboot..."
+      wineboot --init || true
+      sleep 3
+    fi
+  fi
+  debug "✓ Wine prefix ready"
+
+  log "✓ All pre-flight checks passed"
+}
+
+# ----------------------------
+# Server Startup
+# ----------------------------
+start_server() {
+  log "Starting Enshrouded Dedicated Server..."
+  log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  log "Server Configuration:"
+  log "  Name:         ${SERVER_NAME}"
+  log "  Max Players:  ${SERVER_SLOTS}"
+  log "  Game Port:    ${GAME_PORT}"
+  log "  Query Port:   ${QUERY_PORT}"
+  log "  Save Dir:     ${SAVEGAME_DIR}"
+  log "  Log Dir:      ${LOG_DIR}"
+  log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+  cd "${SERVER_DIR}"
+
+  local wine_bin
+  wine_bin="$(resolve_wine)" || { error "Wine missing at runtime"; exit 1; }
+
+  log "Launching server with Wine..."
+  info "Display:     ${DISPLAY}"
+  info "WINEPREFIX:  ${WINEPREFIX}"
+  info "Wine bin:    ${wine_bin}"
+
+  exec "${wine_bin}" "${SERVER_DIR}/enshrouded_server.exe"
+}
+
+# ----------------------------
+# Main
+# ----------------------------
+main() {
+  print_banner
+
+  trap graceful_shutdown SIGTERM SIGINT SIGHUP
+
+  preflight_checks
+
+  create_directories
+  generate_config
+  start_xvfb
+
   update_server
-else
-  echo "[=] UPDATE_ON_START=0 — skipping SteamCMD update"
-fi
+  verify_installation
+  prepare_server_config
 
-write_config_if_missing
-apply_env_overrides
-ensure_appid_file
+  start_server
+}
 
-echo "[+] Starting Enshrouded server..."
-cd "${EN_DIR}"
-
-exec gosu steam bash -lc "
-  set -e
-
-  export WINEPREFIX='${WINEPREFIX}'
-  export WINEDEBUG='-all'
-  export XDG_RUNTIME_DIR=/tmp/runtime-steam
-  mkdir -p \$XDG_RUNTIME_DIR
-  chmod 700 \$XDG_RUNTIME_DIR
-
-  if [[ '${RESET_WINEPREFIX}' == '1' ]]; then
-    echo '[!] RESET_WINEPREFIX=1 — resetting Wine prefix'
-    rm -rf \"\$WINEPREFIX\"
-    mkdir -p \"\$WINEPREFIX\"
-  fi
-
-  # Ensure ownership (important if volume/previous runs created root-owned files)
-  chown -R steam:steam \"\$WINEPREFIX\"
-
-  # Headless X server for Wine
-  Xvfb :0 -screen 0 1024x768x16 >/dev/null 2>&1 &
-  export DISPLAY=:0
-
-  echo '[=] Wine binary:' \$(command -v wine || true)
-  wine --version
-
-  # Initialize prefix (creates kernel32/etc) - prevents some c0000135 situations
-  wineboot -u || true
-
-  exec wine enshrouded_server.exe
-"
+main "$@"
