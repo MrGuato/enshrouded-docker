@@ -1,7 +1,9 @@
+version: "3.8"
+
 services:
   enshrouded:
-    image: ghcr.io/mrguato/enshrouded-docker:latest
-    container_name: enshrouded
+    build: .
+    container_name: enshrouded-server
     restart: unless-stopped
 
     ports:
@@ -10,16 +12,24 @@ services:
 
     environment:
       UPDATE_ON_START: "1"
-      SERVER_NAME: "Ex Enshrouded Server Name"
+      SERVER_NAME: "My Enshrouded Server"
       SERVER_SLOTS: "16"
-      SERVER_PASSWORD: "SuperStrongPW!"
-      PORT: "15637"
-      STEAM_PORT: "27015"
-
-      # Optional but useful
-      FORCE_CONFIG_REWRITE: "1"   # set to 1 if you want env vars to overwrite JSON
-      RESET_WINEPREFIX: "0"       # set to 1 once if Wine gets cursed again
+      SERVER_PASSWORD: ""     # empty = no password
+      GAME_PORT: "15637"
+      QUERY_PORT: "27015"
+      DISPLAY: ":99"          # optional; your entrypoint can also auto-pick if you implemented that
 
     volumes:
-      - ./data:/home/steam/enshrouded
-      - ./wine:/home/steam/.wine
+      # Persist config + saves/logs
+      - ./enshrouded-config:/home/steam/config
+      # Persist the actual server install so it doesn't re-download every time
+      - ./enshrouded-server:/home/steam/server
+      # Optional: persist Wine prefix (reduces first-run overhead)
+      - ./enshrouded-wine:/home/steam/.wine
+
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f enshrouded_server.exe >/dev/null 2>&1 || exit 1"]
+      interval: 60s
+      timeout: 10s
+      start_period: 180s
+      retries: 3
