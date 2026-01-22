@@ -12,7 +12,7 @@ LABEL version="1.0"
 ENV STEAM_APP_ID=2278520
 ENV STEAM_APP_NAME="enshrouded"
 
-# Server paths (rouhim base uses these standard paths)
+# Server paths
 ENV SERVER_DIR="/home/steam/server"
 ENV SERVER_CONFIG_DIR="/home/steam/config"
 
@@ -31,28 +31,23 @@ ENV WINEDEBUG=-all
 # Setup
 # ============================================================================
 
-# Switch to root to install any additional packages if needed
+# Switch to root for installation
 USER root
 
-# Create config directory
-RUN mkdir -p ${SERVER_CONFIG_DIR} && \
-    chown -R steam:steam ${SERVER_CONFIG_DIR}
+# Ensure steam user exists (may already exist in base image)
+RUN id -u steam &>/dev/null || useradd -m -u 1000 -s /bin/bash steam
 
-# Copy entrypoint and helper scripts
+# Create directories and set permissions
+RUN mkdir -p ${SERVER_DIR} ${SERVER_CONFIG_DIR} && \
+    chown -R steam:steam /home/steam
+
+# Copy entrypoint script
 COPY --chown=steam:steam entrypoint.sh /home/steam/entrypoint.sh
 RUN chmod +x /home/steam/entrypoint.sh
 
 # Switch back to steam user for security
 USER steam
 WORKDIR /home/steam
-
-# ============================================================================
-# Startup Command Configuration
-# ============================================================================
-
-# The rouhim base expects STARTUP_COMMAND to launch the server
-# We'll override this in entrypoint.sh for more control
-ENV STARTUP_COMMAND="wine64 ${SERVER_DIR}/enshrouded_server.exe"
 
 # ============================================================================
 # Network & Health
