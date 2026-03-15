@@ -72,7 +72,7 @@ resolve_steamcmd() {
   fi
 
   # 3) PATH lookups (many images expose steamcmd as a binary)
-  if command -v steamcmd >/dev/null 2>&1; then reminding="steamcmd"; echo "steamcmd"; return 0; fi
+  if command -v steamcmd >/dev/null 2>&1; then echo "steamcmd"; return 0; fi
   if command -v steamcmd.sh >/dev/null 2>&1; then echo "$(command -v steamcmd.sh)"; return 0; fi
 
   # 4) Common locations
@@ -190,6 +190,19 @@ start_xvfb() {
   fi
 }
 
+init_wine() {
+  if command -v wineboot >/dev/null 2>&1; then
+    if [[ ! -f "${WINEPREFIX}/system.reg" ]]; then
+      warn "Initializing Wine prefix (wineboot --init)..."
+      wineboot --init 2>/dev/null || true
+      sleep 3
+      info "✓ Wine prefix initialized: ${WINEPREFIX}"
+    else
+      info "✓ Wine prefix already exists: ${WINEPREFIX}"
+    fi
+  fi
+}
+
 # ----------------------------------------------------------------------------
 # SteamCMD update/install
 # ----------------------------------------------------------------------------
@@ -280,7 +293,6 @@ preflight_checks() {
   if command -v wineboot >/dev/null 2>&1; then
     if [[ ! -f "${WINEPREFIX}/system.reg" ]]; then
       warn "Initializing Wine prefix (wineboot)..."
-      wineboot --init || true
       sleep 2
     fi
   fi
@@ -309,14 +321,14 @@ main() {
   print_banner
   trap graceful_shutdown SIGTERM SIGINT SIGHUP
 
-  preflight_checks
+  preflight_checks        
   create_directories
   generate_config
-  start_xvfb
+  start_xvfb            
+  init_wine              
   update_server
   verify_installation
   prepare_server_config
   start_server
 }
-
 main "$@"

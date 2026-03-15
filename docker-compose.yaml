@@ -2,6 +2,7 @@ version: "3.8"
 
 services:
   enshrouded:
+    image: ghcr.io/mrguato/enshrouded-docker:latest
     build: .
     container_name: enshrouded-server
     restart: unless-stopped
@@ -14,7 +15,7 @@ services:
       UPDATE_ON_START: "1"
       SERVER_NAME: "My Enshrouded Server"
       SERVER_SLOTS: "16"
-      SERVER_PASSWORD: ""     # empty = no password
+      SERVER_PASSWORD: ""     # empty = no password - change if you want a password
       GAME_PORT: "15637"
       QUERY_PORT: "27015"
       DISPLAY: ":99"          # optional; your entrypoint can also auto-pick if you implemented that

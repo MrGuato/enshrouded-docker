@@ -1,13 +1,9 @@
 [![Made With Love](https://img.shields.io/badge/Made%20with%20%E2%9D%A4%EF%B8%8F-by%20Jonathan-red)](https://github.com/MrGuato)
 [![pages-build-deployment](https://github.com/MrGuato/enshrouded-docker/actions/workflows/pages/pages-build-deployment/badge.svg)](https://github.com/MrGuato/enshrouded-docker/actions/workflows/pages/pages-build-deployment)
 [![Build & Push (GHCR)](https://github.com/MrGuato/enshrouded-docker/actions/workflows/docker-ghcr.yml/badge.svg)](https://github.com/MrGuato/enshrouded-docker/actions/workflows/docker-ghcr.yml)
-[![GHCR](https://img.shields.io/badge/GHCR-container%20registry-blue)](https://github.com/<your-username>/<repo>/pkgs/container)
-![Visitors](https://visitor-badge.laobi.icu/badge?page_id=<your-username>.<repo>)
+[![GHCR](https://img.shields.io/badge/GHCR-container%20registry-blue)](https://github.com/mrguato/enshrouded-docker/pkgs/container)
+![Visitors](https://visitor-badge.laobi.icu/badge?page_id=mrguato.enshrouded-docker)
 
-
-
-
-## **Work In Progress**
 
 # Enshrouded Dedicated Server | Automated Docker Deployment
 
@@ -38,31 +34,30 @@ Instead of baking a specific server version into the image, this container ships
 
 ## Architecture Overview
 
+### Network Diagram
+
 ```
-┌─────────────────────────┐
-│ Docker Image (Immutable)│
-│ • Ubuntu LTS            │
-│ • SteamCMD              │
-│ • Wine (Windows server) │
-│ • Entrypoint logic      │
-└───────────┬─────────────┘
+Host (Docker Engine)
+┌──────────────────────────────────────────────┐
+│ Docker Compose                               │
+│   (docker compose up)                        │
+└───────────┬──────────────────────────────────┘
             │
             ▼
-┌─────────────────────────┐
-│ Runtime Update (Auto)   │
-│ steamcmd                │
-│ +app_update 2278520     │
-│ validate                │
-└───────────┬─────────────┘
+Container (enshrouded-docker)
+┌──────────────────────────────────────────────┐
+│ Entrypoint script                            │
+│ SteamCMD + Wine (Xvfb)                       │
+│ Enshrouded Dedicated Server                  │
+└───────────┬──────────────────────────────────┘
             │
-            ▼
-┌─────────────────────────┐
-│ Persistent Data Volume  │
-│ • World saves           │
-│ • Logs                  │
-│ • Server config         │
-└─────────────────────────┘
+  ┌─────────┴──────────┐
+  │                    │
+  ▼                    ▼
+UDP 15637/27015     Persisted volumes (savegame/logs/config)
 ```
+
+> Diagram key: the container bundles the runtime (Wine + SteamCMD), mounts persistent data, and exposes the game server over UDP.
 
 ---
 
@@ -89,7 +84,7 @@ At runtime, the container entrypoint fully automates server updates, config gene
 Pull the image:
 
 ```bash
-docker pull ghcr.io/<your-username>/<repo>:latest
+docker pull ghcr.io/mrguato/enshrouded-docker:latest
 ```
 
 Run with Docker Compose:
@@ -97,7 +92,7 @@ Run with Docker Compose:
 ```yaml
 services:
   enshrouded:
-    image: ghcr.io/<your-username>/<repo>:latest
+    image: ghcr.io/mrguato/enshrouded-docker:latest
     restart: unless-stopped
     ports:
       - "15637:15637/udp"
@@ -113,6 +108,29 @@ services:
 ```bash
 docker compose up -d
 ```
+
+## Updating (pull latest image)
+
+When you want to upgrade to the latest published image, run:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+This re-creates the container from the new image while keeping your persisted data intact.
+
+---
+
+## Deploy on Ubuntu VM
+
+If you're running on an Ubuntu VM (e.g., in a cloud provider or on a home lab), you can use the included `setup.sh` script to install Docker, Docker Compose, and deploy the container with sane defaults:
+
+```bash
+./setup.sh
+```
+
+This will provision the VM and start the Enshrouded server for you.
 
 ---
 
