@@ -172,16 +172,15 @@ start_xvfb() {
     warn "Xvfb not found; continuing without virtual display"
     return 0
   fi
-
   log "Starting Xvfb..."
   if pgrep -x "Xvfb" >/dev/null 2>&1; then
     info "Xvfb already running"
     return 0
   fi
-
+  # Clean up stale lock/socket from previous container run
+  rm -f "/tmp/.X${DISPLAY#:}-lock" "/tmp/.X11-unix/X${DISPLAY#:}"
   Xvfb "${DISPLAY}" -screen 0 1024x768x16 -nolisten tcp -ac &
   sleep 2
-
   if pgrep -x "Xvfb" >/dev/null 2>&1; then
     info "✓ Xvfb started on ${DISPLAY}"
   else
