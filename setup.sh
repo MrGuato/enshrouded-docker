@@ -1,24 +1,35 @@
 #!/usr/bin/env bash
-# One-shot setup for fresh Ubuntu VM
-# Usage: bash setup.sh
-
 set -euo pipefail
 
-# Install Docker if missing
+# Install dependencies
+if ! command -v git &>/dev/null || ! command -v docker &>/dev/null; then
+  sudo apt-get update
+  sudo apt-get install -y git
+fi
+
+# Install Docker
 if ! command -v docker &>/dev/null; then
   curl -fsSL https://get.docker.com | sh
   sudo usermod -aG docker "$USER"
-  echo "Docker installed. You may need to log out/in for group changes."
-  echo "Run this script again after re-login, or prefix docker commands with sudo."
+  echo ""
+  echo "Docker installed. Log out and back in, then re-run this script."
+  exit 0
 fi
 
-# Verify compose plugin
-if ! docker compose version &>/dev/null; then
+# Install compose plugin if missing
+if ! docker compose version &>/dev/null 2>&1; then
   sudo apt-get update && sudo apt-get install -y docker-compose-plugin
+fi
+
+# Clone repo if not already present
+if [[ ! -f "docker-compose.yml" ]]; then
+  git clone https://github.com/MrGuato/enshrouded-docker .
 fi
 
 # Build and start
 docker compose up -d --build
+
 echo ""
-echo "Server starting. Follow logs with: docker logs -f enshrouded-server"
+echo "Server starting (~6GB download on first run)."
+echo "Follow logs: docker logs -f enshrouded-server"
 echo "Ports: 15637/udp (game), 27015/udp (query)"

@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   enshrouded:
     image: ghcr.io/mrguato/enshrouded-docker:latest
@@ -19,6 +17,7 @@ services:
       GAME_PORT: "15637"
       QUERY_PORT: "27015"
       DISPLAY: ":99"          # optional; your entrypoint can also auto-pick if you implemented that
+      WINEPREFIX: "/home/steam/.wine"
 
     volumes:
       # Persist config + saves/logs

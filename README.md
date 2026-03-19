@@ -4,160 +4,199 @@
 [![GHCR](https://img.shields.io/badge/GHCR-container%20registry-blue)](https://github.com/mrguato/enshrouded-docker/pkgs/container)
 ![Visitors](https://visitor-badge.laobi.icu/badge?page_id=mrguato.enshrouded-docker)
 
+# Enshrouded Dedicated Server — Docker
 
-# Enshrouded Dedicated Server | Automated Docker Deployment
-
-> **Always up-to-date Enshrouded Dedicated Server, packaged as an immutable Docker image with runtime auto-updates via SteamCMD.**
-
-This project provides a **clean, reproducible, and automated** way to run an Enshrouded Dedicated Server using Docker. It is designed with **DevOps best practices** in mind: immutable infrastructure, automation-first workflows, and safe persistence of state.
+> **Set-and-forget Enshrouded Dedicated Server. Pulls the latest game build on every start via SteamCMD. No rebuilds. No manual updates. No drift.**
 
 ---
 
 ## Why This Exists
 
-Most existing Enshrouded server setups fall into one of these traps:
+Most Enshrouded server setups fall into one of these traps:
 
 - ❌ Manual installs that drift over time
-- ❌ Docker images that go stale when Steam updates the server
-- ❌ Containers that require rebuilding just to get the latest game version
-- ❌ Root containers, unclear persistence, or brittle startup logic
+- ❌ Docker images that go stale between Steam updates
+- ❌ Containers that need a full rebuild just to patch the game
+- ❌ Root containers, brittle startup logic, or unclear persistence
 
-This project intentionally avoids those problems.
+This project fixes all of that.
 
 ### Core Idea
 
-> **The container is immutable. The game server is not.**
+> **The image is immutable. The game server is not.**
 
-Instead of baking a specific server version into the image, this container ships **SteamCMD + Wine**, pulls the **latest Enshrouded Dedicated Server (Steam AppID `2278520`) on startup**, and starts the server only after update validation succeeds. This guarantees no broken `latest` tags, no manual updates, and no rebuilds just to patch the game.
-
----
-
-## Architecture Overview
-
-### Network Diagram
-
-```
-Host (Docker Engine)
-┌──────────────────────────────────────────────┐
-│ Docker Compose                               │
-│   (docker compose up)                        │
-└───────────┬──────────────────────────────────┘
-            │
-            ▼
-Container (enshrouded-docker)
-┌──────────────────────────────────────────────┐
-│ Entrypoint script                            │
-│ SteamCMD + Wine (Xvfb)                       │
-│ Enshrouded Dedicated Server                  │
-└───────────┬──────────────────────────────────┘
-            │
-  ┌─────────┴──────────┐
-  │                    │
-  ▼                    ▼
-UDP 15637/27015     Persisted volumes (savegame/logs/config)
-```
-
-> Diagram key: the container bundles the runtime (Wine + SteamCMD), mounts persistent data, and exposes the game server over UDP.
+The container ships **Wine + SteamCMD**. On every start, it pulls the latest Enshrouded Dedicated Server (AppID `2278520`) before launching — so you're always running the current version without touching the image.
 
 ---
 
-## Why Docker Is the Right Tool Here
+## Quick Start (Fresh Ubuntu VM)
 
-Docker provides reproducibility by ensuring every server instance starts from the **same known-good environment** - same OS, same dependencies, same startup logic - eliminating “it worked on my machine” issues. The container follows **immutable infrastructure** principles: no in-place OS changes, no snowflake servers, and no configuration drift. All state lives **only** in mounted volumes.
-
-Docker also enables a **clean separation of concerns**: the image handles runtime dependencies and automation logic, volumes store world data and logs, and environment variables control behavior and tuning. This mirrors how real production workloads are deployed.
-
-When Enshrouded releases an update, upgrades are safe and trivial: restart the container, SteamCMD pulls the latest build, and the server starts on the new version automatically - no rebuild pipelines, no guesswork.
-
----
-
-## Automation & DevOps Practices Used
-
-This repository includes a **Buildx-powered GitHub Actions CI/CD pipeline** that builds images on `main` branch pushes, scheduled daily runs, and manual dispatch. Images are published to **GitHub Container Registry (GHCR)** with intelligent tags including `latest`, `sha-<commit>`, `YYYYMMDD`, and optional SemVer tags like `v1.0.0`. This reflects modern container publishing workflows used in production platforms.
-
-At runtime, the container entrypoint fully automates server updates, config generation (if missing), safe startup sequencing, non-root execution, and headless Wine execution via Xvfb. Once deployed, no manual intervention is required.
-
----
-
-## Quick Start
-
-Pull the image:
+The fastest path from zero to running server:
 
 ```bash
-docker pull ghcr.io/mrguato/enshrouded-docker:latest
+curl -fsSL https://raw.githubusercontent.com/MrGuato/enshrouded-docker/main/setup.sh | bash
 ```
 
-Run with Docker Compose:
+`setup.sh` installs Docker if missing, then pulls and starts the container. On first run it will prompt you to log out and back in if Docker was just installed — then run it again.
+
+---
+
+## Manual Setup (Docker Compose)
+
+If you already have Docker installed:
+
+```bash
+git clone https://github.com/MrGuato/enshrouded-docker
+cd enshrouded-docker
+docker compose up -d
+```
+
+Watch the first-run download (~6 GB):
+
+```bash
+docker compose logs -f
+```
+
+### docker-compose.yml
 
 ```yaml
 services:
   enshrouded:
     image: ghcr.io/mrguato/enshrouded-docker:latest
+    build: .
+    container_name: enshrouded-server
     restart: unless-stopped
     ports:
       - "15637:15637/udp"
       - "27015:27015/udp"
     environment:
-      - UPDATE_ON_START=1
-      - SERVER_NAME=My Enshrouded Server
-      - SERVER_SLOTS=16
+      UPDATE_ON_START: "1"
+      SERVER_NAME: "My Enshrouded Server"
+      SERVER_SLOTS: "16"
+      SERVER_PASSWORD: ""        # leave empty for no password
+      GAME_PORT: "15637"
+      QUERY_PORT: "27015"
+      WINEPREFIX: "/home/steam/.wine"
     volumes:
-      - ./data:/home/steam/enshrouded
+      - ./enshrouded-config:/home/steam/config    # saves, logs, config
+      - ./enshrouded-server:/home/steam/server    # game files (cached)
+      - ./enshrouded-wine:/home/steam/.wine       # Wine prefix (cached)
 ```
 
-```bash
-docker compose up -d
+---
+
+## Environment Variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `UPDATE_ON_START` | `1` | Pull latest game build on startup (`0` to skip) |
+| `SERVER_NAME` | `Enshrouded Docker Server` | Server name shown in browser |
+| `SERVER_SLOTS` | `16` | Max player slots |
+| `SERVER_PASSWORD` | *(empty)* | Leave empty for public server |
+| `GAME_PORT` | `15637` | UDP game port |
+| `QUERY_PORT` | `27015` | UDP query/discovery port |
+| `WINEPREFIX` | `/home/steam/.wine` | Wine prefix path |
+
+---
+
+## Persistence Model
+
+State lives entirely in mounted volumes — survive rebuilds, image upgrades, and host migrations:
+
+```
+enshrouded-config/
+ ├─ savegame/          ← world saves
+ ├─ logs/              ← server logs
+ └─ enshrouded_server.json   ← server config
+
+enshrouded-server/    ← game binaries (SteamCMD install target)
+enshrouded-wine/      ← Wine prefix
 ```
 
-## Updating (pull latest image)
+Persisting `enshrouded-server/` means SteamCMD only downloads what changed, not the full ~6 GB on every restart.
 
-When you want to upgrade to the latest published image, run:
+---
+
+## Updating
+
+To pull the latest published image:
 
 ```bash
 docker compose pull
 docker compose up -d
 ```
 
-This re-creates the container from the new image while keeping your persisted data intact.
+Your world data is untouched. The container re-creates from the new image and SteamCMD handles any game binary updates on startup.
 
 ---
 
-## Deploy on Ubuntu VM
+## Ports
 
-If you're running on an Ubuntu VM (e.g., in a cloud provider or on a home lab), you can use the included `setup.sh` script to install Docker, Docker Compose, and deploy the container with sane defaults:
+| Port | Protocol | Purpose |
+|---|---|---|
+| `15637` | UDP | Game traffic |
+| `27015` | UDP | Server discovery / query |
 
+Open both on your host firewall and forward them on your router if hosting publicly.
+
+---
+
+## Architecture
+
+```
+Host (Ubuntu VM)
+┌─────────────────────────────────────────────────┐
+│  docker compose up                              │
+└───────────────┬─────────────────────────────────┘
+                │
+                ▼
+  Container: enshrouded-server
+┌─────────────────────────────────────────────────┐
+│  entrypoint.sh                                  │
+│   ├─ Xvfb :99 (headless display for Wine)       │
+│   ├─ SteamCMD → app_update 2278520 validate     │
+│   └─ wine enshrouded_server.exe                 │
+└───────────┬─────────────────────────────────────┘
+            │
+  ┌─────────┴──────────┐
+  ▼                    ▼
+UDP 15637/27015     ./enshrouded-*/  (volume mounts)
+```
+
+---
+
+## Security
+
+- Runs as non-root user (`steam`, uid 999)
+- No privileged mode
+- Only required UDP ports exposed
+- No inbound management interfaces
+- All state in explicit volume mounts — nothing hidden in the container layer
+
+---
+
+## CI/CD
+
+A GitHub Actions pipeline builds and pushes images to GHCR on every push to `main`, on a daily schedule, and on manual dispatch. Published tags: `latest`, `sha-<commit>`, `YYYYMMDD`, and SemVer (`v1.x.x`) when tagged.
+
+---
+
+## Troubleshooting
+
+**Server not visible in-game**
+- Verify UDP 15637 and 27015 are open on the host firewall
+- Confirm router port forwarding if self-hosted
+- `docker ps` to verify ports are published
+
+**Container crash-loops on startup**
+- `docker compose logs -f` — look for SteamCMD or Wine errors
+- Steam-side failures are often transient; restart the container and try again
+- If `UPDATE_ON_START=1` is set and SteamCMD can't reach Steam, the container will exit rather than start a stale server
+
+**Permission errors on volume directories**
 ```bash
-./setup.sh
+sudo chown -R $USER:$USER ./enshrouded-config ./enshrouded-server ./enshrouded-wine
 ```
-
-This will provision the VM and start the Enshrouded server for you.
-
----
-
-## Persistence Model
-
-All persistent state is stored outside the container:
-
-```
-data/
- ├─ savegame/
- ├─ logs/
- ├─ enshrouded_server.json
-```
-
-You can rebuild images, switch tags, or move hosts without losing world data.
-
----
-
-## Security Considerations
-
-The container runs as a **non-root user**, uses a minimal base OS, avoids privileged mode, exposes only required UDP ports, and provides no inbound management interfaces. This aligns with basic container hardening guidance.
-
----
-
-## Who This Is For
-
-This project is for players who want a **set-and-forget** dedicated server, homelab users practicing real DevOps patterns, engineers who care about **clean automation**, and anyone tired of manually updating game servers.
 
 ---
 
@@ -165,4 +204,4 @@ This project is for players who want a **set-and-forget** dedicated server, home
 
 > Treat game servers like production services.
 
-Even “fun” infrastructure should be automated, reproducible, observable, and easy to reason about. That mindset scales far beyond games.
+Automated, reproducible, observable, easy to reason about. The same mindset that makes this a good game server setup makes it a good pattern for anything else you run.

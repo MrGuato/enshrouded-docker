@@ -1,5 +1,4 @@
 FROM ubuntu:22.04
-
 ENV DEBIAN_FRONTEND=noninteractive
 ENV WINEARCH=win64
 ENV WINEDEBUG=-all
@@ -13,6 +12,10 @@ ENV SERVER_PASSWORD=""
 ENV GAME_PORT=15637
 ENV QUERY_PORT=27015
 ENV UPDATE_ON_START=1
+
+# SteamCMD lives here — add to PATH so steamcmd.sh resolves linux32/ correctly
+ENV STEAMCMD_DIR=/opt/steamcmd
+ENV PATH="/opt/steamcmd:${PATH}"
 
 USER root
 
@@ -34,12 +37,12 @@ RUN dpkg --add-architecture i386 \
 # Create steam user
 RUN groupadd -r steam && useradd -r -m -g steam -s /bin/bash steam
 
-# Install SteamCMD to /opt/steamcmd
+# Install SteamCMD directly into /opt/steamcmd — no symlinks
 RUN mkdir -p /opt/steamcmd \
  && curl -fsSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
       | tar -xzf - -C /opt/steamcmd \
  && chmod +x /opt/steamcmd/steamcmd.sh \
- && ln -sf /opt/steamcmd/steamcmd.sh /usr/local/bin/steamcmd.sh
+ && chown -R steam:steam /opt/steamcmd
 
 # Dirs + permissions
 RUN mkdir -p /home/steam/server /home/steam/config \
