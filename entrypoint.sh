@@ -164,24 +164,25 @@ init_wine() {
 # ----------------------------------------------------------------------------
 update_server() {
   if [[ "${UPDATE_ON_START}" != "1" ]]; then
-    warn "Auto-update disabled (UPDATE_ON_START != 1)"
+    warn "Auto-update disabled"
     return 0
   fi
 
   local steamcmd
   if ! steamcmd="$(resolve_steamcmd)"; then
-    error "SteamCMD not found — cannot update. Set UPDATE_ON_START=0 to skip."
-    error "Expected: ${STEAMCMD_DIR}/steamcmd.sh"
+    error "SteamCMD not found"
     exit 1
   fi
 
+  log "Initializing SteamCMD..."
+  "${steamcmd}" +quit  # let SteamCMD fully bootstrap itself first
+
   log "Updating/Installing Enshrouded Dedicated Server..."
   debug "SteamCMD: ${steamcmd}"
-  debug "AppID:    ${STEAMAPPID}"
-  debug "Dir:      ${SERVER_DIR}"
 
   "${steamcmd}" \
     +@sSteamCmdForcePlatformType windows \
+    +@sSteamCmdForcePlatformBitness 64 \
     +force_install_dir "${SERVER_DIR}" \
     +login anonymous \
     +app_update "${STEAMAPPID}" validate \
