@@ -26,8 +26,9 @@ if [[ ! -f "docker-compose.yml" ]]; then
   git clone https://github.com/MrGuato/enshrouded-docker .
 fi
 
-# Build and start
-docker compose up -d --build
+# Pull latest image and start
+docker compose pull
+docker compose up -d
 
 echo ""
 echo "Server starting (~6GB download on first run)."

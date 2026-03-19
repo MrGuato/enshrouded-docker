@@ -12,8 +12,6 @@ ENV SERVER_PASSWORD=""
 ENV GAME_PORT=15637
 ENV QUERY_PORT=27015
 ENV UPDATE_ON_START=1
-
-# SteamCMD lives here — add to PATH so steamcmd.sh resolves linux32/ correctly
 ENV STEAMCMD_DIR=/opt/steamcmd
 ENV PATH="/opt/steamcmd:${PATH}"
 
@@ -36,25 +34,24 @@ RUN dpkg --add-architecture i386 \
       xvfb procps curl lib32gcc-s1 gosu \
  && rm -rf /var/lib/apt/lists/*
 
-# Create steam user
 RUN groupadd -r steam && useradd -r -m -g steam -s /bin/bash steam
 
-# Install SteamCMD directly into /opt/steamcmd — no symlinks
 RUN mkdir -p /opt/steamcmd \
  && curl -fsSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
       | tar -xzf - -C /opt/steamcmd \
  && chmod +x /opt/steamcmd/steamcmd.sh \
  && chown -R steam:steam /opt/steamcmd
 
-# Dirs + permissions
 RUN mkdir -p /home/steam/server /home/steam/config \
  && chown -R steam:steam /home/steam
 
+COPY docker-entrypoint.sh /docker-entrypoint.sh
 COPY entrypoint.sh /home/steam/entrypoint.sh
-RUN chmod +x /home/steam/entrypoint.sh \
+RUN chmod +x /docker-entrypoint.sh /home/steam/entrypoint.sh \
  && chown steam:steam /home/steam/entrypoint.sh
 
-USER steam
+# Stay as root — docker-entrypoint.sh fixes perms then drops to steam via gosu
+USER root
 WORKDIR /home/steam
 
 EXPOSE 15637/udp 27015/udp
@@ -62,4 +59,4 @@ EXPOSE 15637/udp 27015/udp
 HEALTHCHECK --interval=60s --timeout=10s --start-period=300s --retries=3 \
   CMD pgrep -f enshrouded_server.exe >/dev/null 2>&1 || exit 1
 
-ENTRYPOINT ["/home/steam/entrypoint.sh"]
+ENTRYPOINT ["/docker-entrypoint.sh"]

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -uo pipefail   # removed -e intentionally; we handle errors explicitly
+set -uo pipefail
 
 readonly RED='\033[0;31m'
 readonly GREEN='\033[0;32m'
@@ -14,9 +14,6 @@ error() { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 info()  { echo -e "${BLUE}[INFO]${NC} $*"; }
 debug() { echo -e "${CYAN}[DEBUG]${NC} $*"; }
 
-# ----------------------------------------------------------------------------
-# Configuration
-# ----------------------------------------------------------------------------
 readonly STEAMAPPID="${STEAM_APP_ID:-2278520}"
 readonly SERVER_DIR="${SERVER_DIR:-/home/steam/server}"
 readonly CONFIG_DIR="${SERVER_CONFIG_DIR:-/home/steam/config}"
@@ -33,6 +30,7 @@ readonly STEAMCMD_DIR="${STEAMCMD_DIR:-/opt/steamcmd}"
 
 export WINEPREFIX="${WINEPREFIX:-${HOME}/.wine}"
 export DISPLAY="${DISPLAY:-:99}"
+export WINEARCH="${WINEARCH:-win64}"
 
 print_banner() {
   log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -47,24 +45,10 @@ print_banner() {
   log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 }
 
-# ----------------------------------------------------------------------------
-# Resolve binaries
-# ----------------------------------------------------------------------------
 resolve_steamcmd() {
-  # Prefer the direct path — avoids symlink $0 resolution bugs
-  if [[ -x "${STEAMCMD_DIR}/steamcmd.sh" ]]; then
-    echo "${STEAMCMD_DIR}/steamcmd.sh"
-    return 0
-  fi
-  if [[ -x "${STEAMCMD_DIR}/steamcmd" ]]; then
-    echo "${STEAMCMD_DIR}/steamcmd"
-    return 0
-  fi
-  # Fallback: search PATH (binary, not script — binary doesn't have the $0 bug)
-  if command -v steamcmd >/dev/null 2>&1; then
-    echo "$(command -v steamcmd)"
-    return 0
-  fi
+  if [[ -x "${STEAMCMD_DIR}/steamcmd.sh" ]]; then echo "${STEAMCMD_DIR}/steamcmd.sh"; return 0; fi
+  if [[ -x "${STEAMCMD_DIR}/steamcmd" ]];    then echo "${STEAMCMD_DIR}/steamcmd";    return 0; fi
+  if command -v steamcmd >/dev/null 2>&1;    then command -v steamcmd;                return 0; fi
   return 1
 }
 
@@ -76,9 +60,6 @@ resolve_wine() {
 
 have_xvfb() { command -v Xvfb >/dev/null 2>&1; }
 
-# ----------------------------------------------------------------------------
-# Directories + config
-# ----------------------------------------------------------------------------
 create_directories() {
   log "Creating directories..."
   mkdir -p "${SERVER_DIR}" "${CONFIG_DIR}" "${SAVEGAME_DIR}" "${LOG_DIR}"
@@ -117,9 +98,6 @@ prepare_server_config() {
   info "✓ Server configuration ready"
 }
 
-# ----------------------------------------------------------------------------
-# Xvfb
-# ----------------------------------------------------------------------------
 start_xvfb() {
   if ! have_xvfb; then
     warn "Xvfb not found; continuing without virtual display"
@@ -141,9 +119,6 @@ start_xvfb() {
   fi
 }
 
-# ----------------------------------------------------------------------------
-# Wine
-# ----------------------------------------------------------------------------
 init_wine() {
   if ! command -v wineboot >/dev/null 2>&1; then
     warn "wineboot not found; skipping Wine prefix init"
@@ -151,17 +126,20 @@ init_wine() {
   fi
   if [[ ! -f "${WINEPREFIX}/system.reg" ]]; then
     log "Initializing Wine prefix..."
-    wineboot --init 2>/dev/null || true
-    sleep 5
-    info "✓ Wine prefix initialized: ${WINEPREFIX}"
+    export DISPLAY WINEARCH WINEPREFIX
+    wineboot --init
+    wineserver --wait    # block until ALL wine background processes finish
+    if [[ -f "${WINEPREFIX}/system.reg" ]]; then
+      info "✓ Wine prefix initialized: ${WINEPREFIX}"
+    else
+      error "Wine prefix initialization failed — system.reg not found"
+      return 1
+    fi
   else
     info "✓ Wine prefix already exists: ${WINEPREFIX}"
   fi
 }
 
-# ----------------------------------------------------------------------------
-# SteamCMD
-# ----------------------------------------------------------------------------
 update_server() {
   if [[ "${UPDATE_ON_START}" != "1" ]]; then
     warn "Auto-update disabled"
@@ -175,7 +153,7 @@ update_server() {
   fi
 
   log "Initializing SteamCMD..."
-  "${steamcmd}" +quit  # let SteamCMD fully bootstrap itself first
+  "${steamcmd}" +quit
 
   log "Updating/Installing Enshrouded Dedicated Server..."
   debug "SteamCMD: ${steamcmd}"
@@ -196,23 +174,14 @@ verify_installation() {
   local server_exe="${SERVER_DIR}/enshrouded_server.exe"
   if [[ ! -f "${server_exe}" ]]; then
     error "Server executable not found: ${server_exe}"
-    error "SteamCMD may have failed silently. Check the output above."
     exit 1
   fi
   info "✓ Found: ${server_exe}"
 }
 
-# ----------------------------------------------------------------------------
-# Preflight
-# ----------------------------------------------------------------------------
 preflight_checks() {
   log "Running pre-flight checks..."
-
-  if [[ "$(id -u)" -eq 0 ]]; then
-    error "Refusing to run as root."
-    exit 1
-  fi
-  debug "✓ Running as non-root (uid=$(id -u), user=$(id -un))"
+  debug "✓ Running as (uid=$(id -u), user=$(id -un))"
 
   local wine_bin
   if ! wine_bin="$(resolve_wine)"; then
@@ -220,13 +189,9 @@ preflight_checks() {
     exit 1
   fi
   debug "✓ Wine available: ${wine_bin}"
-
   log "✓ Pre-flight checks passed"
 }
 
-# ----------------------------------------------------------------------------
-# Shutdown + start
-# ----------------------------------------------------------------------------
 graceful_shutdown() {
   log "Received shutdown signal; stopping..."
   pkill -TERM -f enshrouded_server.exe >/dev/null 2>&1 || true
@@ -249,9 +214,6 @@ start_server() {
   exec "${wine_bin}" "${SERVER_DIR}/enshrouded_server.exe"
 }
 
-# ----------------------------------------------------------------------------
-# Main
-# ----------------------------------------------------------------------------
 main() {
   print_banner
   trap graceful_shutdown SIGTERM SIGINT SIGHUP
