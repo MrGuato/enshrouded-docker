@@ -19,7 +19,6 @@ ENV PATH="/opt/steamcmd:${PATH}"
 
 USER root
 
-# System deps + WineHQ stable
 RUN dpkg --add-architecture i386 \
  && apt-get update \
  && apt-get install -y --no-install-recommends \
@@ -29,9 +28,12 @@ RUN dpkg --add-architecture i386 \
  && wget -NP /etc/apt/sources.list.d/ \
       https://dl.winehq.org/wine-builds/ubuntu/dists/jammy/winehq-jammy.sources \
  && apt-get update \
- && apt-get install -y --install-recommends winehq-stable \
+ && apt-get install -y --install-recommends \
+      winehq-stable \
+      wine-stable-amd64 \
+      wine-stable-i386:i386 \
  && apt-get install -y --no-install-recommends \
-      xvfb procps curl lib32gcc-s1 \
+      xvfb procps curl lib32gcc-s1 gosu \
  && rm -rf /var/lib/apt/lists/*
 
 # Create steam user
