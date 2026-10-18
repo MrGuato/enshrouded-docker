@@ -4,10 +4,10 @@ on:
   push:
     branches: [ "main" ]
     tags:
-      - "v*.*.*"
+      - "v*"
   workflow_dispatch:
   schedule:
-    # Daily at 03:17 UTC (pick any time you want)
+    # Daily at 03:17 UTC
     - cron: "17 3 * * *"
 
 env:
@@ -49,24 +49,24 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            # latest only for main branch
-            type=raw,value=latest,enable={{is_default_branch}}
+            # latest for main branch or release tags
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
+            # tag name directly (e.g. v0.2)
+            type=ref,event=tag
             # short sha tag
             type=sha,format=short,prefix=sha-
             # semver tags when you push a git tag like v1.2.3
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            # daily tag on scheduled runs (or any run)
+            # daily tag
             type=raw,value=${{ steps.date.outputs.date_tag }}
 
       - name: Build & push
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./Dockerfile
+          file: ./dockerfile
           push: true
-          # Enshrouded server is typically run on x86_64; keep it simple unless you truly need multi-arch
           platforms: linux/amd64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

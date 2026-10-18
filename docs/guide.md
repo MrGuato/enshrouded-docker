@@ -1,238 +1,156 @@
-# Guide — Enshrouded Dedicated Server (Docker)
+# Enshrouded Dedicated Server — Linux Setup & Operations Guide
 
-> Deploy a fully automated, always-up-to-date Enshrouded Dedicated Server using Docker. No manual updates, no configuration drift, no root containers.
-
----
-
-## How It Works
-
-The container ships **Wine + SteamCMD** baked into the image. On every startup, it:
-
-1. Starts a headless display (Xvfb) so Wine has somewhere to render
-2. Runs SteamCMD to pull the latest Enshrouded Dedicated Server from Steam
-3. Launches `enshrouded_server.exe` via Wine
-
-The Docker image itself never changes between game updates — SteamCMD handles that at runtime. Your saves and config live in mounted volumes and survive any image rebuild or upgrade.
+> Deploy a fully automated, always-up-to-date Enshrouded Dedicated Server on any Linux machine using Docker. No manual Steam updates, no root runtime, no permission headaches.
 
 ---
 
-## Requirements
+## 1. One-Shot Linux Install (Recommended)
 
-- Ubuntu 22.04+ VM (or any Linux host with Docker)
-- ~10 GB free disk space (6 GB game + Wine prefix + saves)
-- UDP ports 15637 and 27015 open on your firewall
-
----
-
-## Option A — One-Line Setup (Fresh VM)
+On any fresh Ubuntu, Debian, Fedora, or Arch Linux machine, run:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/MrGuato/enshrouded-docker/main/setup.sh | bash
 ```
 
-This script:
-- Installs Docker if not present
-- Installs the Docker Compose plugin if missing
-- Clones the repo if you're not already in it
-- Runs `docker compose up -d --build`
+Want to set your server name, password, and player slots immediately in the same command?
 
-> **Note:** If Docker was just installed, the script will exit and ask you to log out and back in (group membership change). Re-run the script after logging back in.
+```bash
+SERVER_NAME="Flameborn Server" SERVER_PASSWORD="mySecretPassword" SERVER_SLOTS=16 \
+  curl -fsSL https://raw.githubusercontent.com/MrGuato/enshrouded-docker/main/setup.sh | bash
+```
+
+### What `setup.sh` handles automatically:
+1. Installs `git`, `curl`, and **Docker Engine + Docker Compose** if missing — **without** requiring you to log out and re-run the script.
+2. Clones/updates the setup into `~/enshrouded-docker`.
+3. Generates `.env` matched to your Linux user's UID/GID (`PUID`/`PGID`) so you never get permission errors when editing configs or backing up saves.
+4. Opens UDP port `15637/udp` (and `27015/udp`) automatically if `ufw` or `firewalld` is active.
+5. Pulls `ghcr.io/mrguato/enshrouded-docker:latest` and starts the server in the background.
 
 ---
 
-## Option B — Manual (Docker Already Installed)
+## 2. Manual Setup (Docker Compose)
+
+If you already have Docker and Docker Compose installed:
 
 ```bash
-git clone https://github.com/MrGuato/enshrouded-docker
+git clone https://github.com/MrGuato/enshrouded-docker.git
 cd enshrouded-docker
+cp .env.example .env
+nano .env
 docker compose up -d
 ```
 
-Watch startup progress:
+Watch the first-run download (~6 GB from SteamCMD):
 
 ```bash
 docker compose logs -f
 ```
 
-First run downloads ~6 GB from Steam. Subsequent starts are fast because the game files are cached in a volume.
+When you see `[Session] 'HostOnline' (up)` in the logs, your server is live and ready for players.
 
 ---
 
-## Configuration
+## 3. Configuration (`.env` / Environment Variables)
 
-Edit environment variables directly in `docker-compose.yml`, or pass them via a `.env` file in the same directory.
+Edit `.env` in your installation directory and run `docker compose up -d` to apply changes. When `SYNC_CONFIG_ON_START=1` (default), environment variables are synced into `enshrouded_server.json` on startup via `jq` without overwriting custom gameplay settings.
 
 | Variable | Default | Description |
 |---|---|---|
 | `SERVER_NAME` | `Enshrouded Docker Server` | Name shown in the server browser |
-| `SERVER_SLOTS` | `16` | Maximum players |
-| `SERVER_PASSWORD` | *(empty)* | Leave empty for a public server |
-| `GAME_PORT` | `15637` | UDP game port |
-| `QUERY_PORT` | `27015` | UDP query port |
-| `UPDATE_ON_START` | `1` | Set to `0` to skip Steam update on startup |
-| `WINEPREFIX` | `/home/steam/.wine` | Wine prefix location (don't change unless you know why) |
-
-### Example .env file
-
-```env
-SERVER_NAME=My Awesome Server
-SERVER_SLOTS=8
-SERVER_PASSWORD=secretpassword
-UPDATE_ON_START=1
-```
+| `SERVER_SLOTS` | `16` | Maximum players (`1`–`16`) |
+| `SERVER_PASSWORD` | *(empty)* | Single password for all players (leave empty for public server) |
+| `ADMIN_PASSWORD` | *(empty)* | Password for the `Admin` user group (kick/ban + base/chest access) |
+| `FRIEND_PASSWORD` | *(empty)* | Password for the `Friend` user group (base/chest access, no kick/ban) |
+| `GUEST_PASSWORD` | *(empty)* | Password for the `Guest` user group (explore only, no base/chest edits) |
+| `QUERY_PORT` | `15637` | Primary UDP port for both game traffic and server discovery |
+| `ENABLE_VOICE_CHAT` | `false` | Enable in-game voice chat (`true` / `false`) |
+| `VOICE_CHAT_MODE` | `Proximity` | `Proximity` or `Global` |
+| `ENABLE_TEXT_CHAT` | `false` | Enable in-game text chat (`true` / `false`) |
+| `GAME_SETTINGS_PRESET` | `Default` | `Default`, `Relaxed`, `Hard`, `Survival`, or `Custom` |
+| `UPDATE_ON_START` | `1` | Run SteamCMD update check on container start (`0` to skip) |
+| `SYNC_CONFIG_ON_START` | `1` | Sync env vars into `enshrouded_server.json` on start (`0` to disable) |
+| `PUID` / `PGID` | `1000` / `1000` | Host Linux user UID/GID for volume file ownership |
 
 ---
 
-## Ports
+## 4. Ports & Firewall
 
-| Port | Protocol | Purpose |
-|---|---|---|
-| `15637` | UDP | Game traffic (required) |
-| `27015` | UDP | Server discovery / query (required) |
+Enshrouded uses **UDP `15637`** for both gameplay traffic and server browser queries.
 
-**Firewall (UFW):**
+**UFW (Ubuntu / Debian):**
 ```bash
 sudo ufw allow 15637/udp
 sudo ufw allow 27015/udp
 ```
 
-**iptables:**
+**firewalld (Fedora / RHEL / Rocky):**
 ```bash
-sudo iptables -A INPUT -p udp --dport 15637 -j ACCEPT
-sudo iptables -A INPUT -p udp --dport 27015 -j ACCEPT
+sudo firewall-cmd --permanent --add-port=15637/udp
+sudo firewall-cmd --permanent --add-port=27015/udp
+sudo firewall-cmd --reload
 ```
 
-If you're on a home network, also forward both ports on your router to the VM's local IP.
+If hosting behind a home router, forward **UDP 15637** to your Linux machine's local LAN IP.
 
 ---
 
-## Persistence
+## 5. Persistence & Backups
 
-All state lives outside the container in three directories created automatically on first run:
+All persistent data lives on your host inside `~/enshrouded-docker/`:
 
+```text
+enshrouded-docker/
+├── enshrouded-config/
+│   ├── enshrouded_server.json  ← Server configuration
+│   ├── savegame/               ← World saves (back this up!)
+│   └── logs/                   ← Server logs
+├── enshrouded-server/          ← Cached SteamCMD game binaries (~6 GB)
+└── enshrouded-wine/            ← Cached Wine64 prefix
 ```
-enshrouded-config/
- ├─ savegame/               ← world saves
- ├─ logs/                   ← server logs
- └─ enshrouded_server.json  ← auto-generated server config
 
-enshrouded-server/          ← game binaries (SteamCMD target)
-enshrouded-wine/            ← Wine prefix
-```
-
-You can safely:
-- Rebuild or upgrade the Docker image
-- Change the `SERVER_NAME`, slots, or password
-- Move the entire directory to another host
-
-Your world data will be intact as long as these directories are preserved.
-
----
-
-## Updating the Server
-
-Game updates happen automatically on container restart when `UPDATE_ON_START=1`. SteamCMD only downloads changed files, so updates are fast.
-
-To also pull the latest Docker image:
-
+### Back up your world
 ```bash
-docker compose pull
-docker compose up -d
-```
-
-To restart without updating the game:
-
-```bash
-UPDATE_ON_START=0 docker compose up -d
+cd ~/enshrouded-docker
+tar -czf "enshrouded-backup-$(date +%Y%m%d-%H%M%S).tar.gz" -C enshrouded-config savegame enshrouded_server.json
 ```
 
 ---
 
-## Common Operations
-
-**Stop the server:**
-```bash
-docker compose down
-```
-
-**Restart:**
-```bash
-docker compose restart
-```
+## 6. Common Operations
 
 **View live logs:**
 ```bash
 docker compose logs -f
 ```
 
-**Open a shell inside the container:**
+**Restart & install latest Enshrouded patch:**
 ```bash
-docker exec -it enshrouded-server bash
+docker compose restart
 ```
 
-**Back up your world:**
+**Apply `.env` configuration changes:**
 ```bash
-tar -czf enshrouded-backup-$(date +%Y%m%d).tar.gz enshrouded-config/savegame/
-```
-
----
-
-## Troubleshooting
-
-### Server doesn't appear in the browser
-
-1. Confirm UDP 15637 and 27015 are open: `sudo ufw status`
-2. Check the container is running and ports are published: `docker ps`
-3. If behind a router, verify port forwarding is pointing to this VM's IP
-4. Wait ~60 seconds after startup — the healthcheck starts period is 3 minutes
-
-### Container exits immediately after starting
-
-Check logs:
-```bash
-docker compose logs --tail=50
-```
-
-Common causes:
-- SteamCMD failed to reach Steam (transient — restart and try again)
-- Game binary not found after SteamCMD run (check for download errors in the log)
-- Volume permission issues (see below)
-
-### Permission errors on the data directories
-
-```bash
-sudo chown -R $USER:$USER ./enshrouded-config ./enshrouded-server ./enshrouded-wine
-```
-
-### Wine or Xvfb errors in logs
-
-These are usually harmless warnings from Wine initializing a new prefix. If the server still starts, ignore them. If it doesn't start, check that `enshrouded-wine/` is not corrupted — delete it and let the container re-initialize.
-
-```bash
-rm -rf ./enshrouded-wine
 docker compose up -d
 ```
 
----
+**Update the Docker container image:**
+```bash
+docker compose pull && docker compose up -d
+```
 
-## Security Notes
-
-- Runs as a non-root user inside the container (`steam`, uid 999)
-- No privileged mode required
-- Only UDP 15637 and 27015 are exposed — no management ports
-- All persistent state is in explicit volume mounts — the container itself is stateless
-
----
-
-## Recommended Practices
-
-- Use `restart: unless-stopped` so the server comes back after a VM reboot
-- Back up `enshrouded-config/savegame/` on a schedule (cron + tar works fine)
-- Pin to a specific image tag (`sha-abc1234` or `YYYYMMDD`) if you want controlled upgrades instead of always-latest
-- Keep `UPDATE_ON_START=1` — it protects you from running a mismatched server version after a game update
+**Stop the server gracefully (flushes world saves):**
+```bash
+docker compose down
+```
 
 ---
 
-## Questions / Issues
+## 7. Troubleshooting
 
-Open an issue at [github.com/MrGuato/enshrouded-docker](https://github.com/MrGuato/enshrouded-docker)
+### Server doesn't appear in the browser
+1. Wait for the initial ~6 GB SteamCMD download to finish (`docker compose logs -f` until `[Session] 'HostOnline' (up)`).
+2. Confirm UDP port `15637` is open on your host firewall (`sudo ufw status`) and cloud security group.
+3. Verify router port forwarding for UDP `15637` if hosting on a home network.
+
+### Editing `enshrouded_server.json` manually
+Always stop the server (`docker compose down`) before editing `./enshrouded-config/enshrouded_server.json` directly, as Enshrouded writes to this file during shutdown. If you manage `enshrouded_server.json` completely by hand, set `SYNC_CONFIG_ON_START=0` in `.env`.
