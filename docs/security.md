@@ -34,7 +34,7 @@ Every push and pull request runs:
 | ----- | ---------------- |
 | hadolint | The Dockerfile |
 | shellcheck | Every shell script, including `enshrouded` |
-| CodeQL | The GitHub Actions workflows |
+| CodeQL | The GitHub Actions workflows (GitHub default setup) |
 | gitleaks | Secrets anywhere in the git history |
 | Trivy | Repo misconfigurations and vulnerabilities in the built image |
 

@@ -21,7 +21,7 @@
   <a href="https://github.com/MrGuato/enshrouded-docker/actions/workflows/build.yml"><img src="https://github.com/MrGuato/enshrouded-docker/actions/workflows/build.yml/badge.svg" alt="Build and Publish"></a>
   <a href="https://github.com/MrGuato/enshrouded-docker/actions/workflows/lint.yml"><img src="https://github.com/MrGuato/enshrouded-docker/actions/workflows/lint.yml/badge.svg" alt="Lint"></a>
   <a href="https://github.com/MrGuato/enshrouded-docker/actions/workflows/security.yml"><img src="https://github.com/MrGuato/enshrouded-docker/actions/workflows/security.yml/badge.svg" alt="Security"></a>
-  <a href="https://github.com/MrGuato/enshrouded-docker/actions/workflows/codeql.yml"><img src="https://github.com/MrGuato/enshrouded-docker/actions/workflows/codeql.yml/badge.svg" alt="CodeQL"></a>
+  <a href="https://github.com/MrGuato/enshrouded-docker/actions/workflows/github-code-scanning/codeql"><img src="https://github.com/MrGuato/enshrouded-docker/actions/workflows/github-code-scanning/codeql/badge.svg" alt="CodeQL"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/MrGuato/enshrouded-docker" alt="License: MIT"></a>
   <a href="https://github.com/MrGuato/enshrouded-docker/commits/main"><img src="https://img.shields.io/github/last-commit/MrGuato/enshrouded-docker" alt="Last commit"></a>
   <a href="https://github.com/MrGuato/enshrouded-docker/pkgs/container/enshrouded-docker"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2Fipitio%2Fbackage%2Fraw%2Findex%2FMrGuato%2Fenshrouded-docker%2Fenshrouded-docker.json&query=%24.downloads&label=pulls&logo=docker&logoColor=white&color=2496ed" alt="Container pulls"></a>
@@ -151,7 +151,7 @@ enshrouded-docker/
 +-- scripts/backup.sh        Verified tarballs with retention
 +-- scripts/restore.sh       Restore from a tarball
 +-- docs/                    The documentation site (Just the Docs)
-+-- .github/workflows/       Build and publish, lint, security scans, CodeQL
++-- .github/workflows/       Build and publish, lint, security scans (CodeQL runs as GitHub default setup)
 ```
 
 Only infrastructure code lives here: no game files, saves, server addresses or secrets. `.env` is gitignored.

@@ -16,7 +16,7 @@ The project now works the same way as my [Valheim server](https://github.com/MrG
 - Healthcheck script with a 15-minute start period for the first download, and log rotation.
 - Documentation site on Just the Docs at <https://mrguato.github.io/enshrouded-docker/>: installation, configuration, updates, backups, security and troubleshooting.
 - A logo.
-- Lint (hadolint, shellcheck), Security (gitleaks, Trivy config and image scans) and CodeQL workflows. Dependabot now actually watches the base image and the actions.
+- Lint (hadolint, shellcheck) and Security (gitleaks, Trivy config and image scans) workflows, next to the CodeQL default setup. Dependabot now actually watches the base image and the actions.
 - `SECURITY.md`.
 
 ### Changed
