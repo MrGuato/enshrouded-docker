@@ -87,15 +87,87 @@ set_env() {     # set_env KEY VALUE -> replace KEY=... in .env
     rm -f "$tmp"
 }
 
-ask() {         # ask VAR "Prompt" DEFAULT -> keeps an already-exported VAR, prompts on a terminal
-    local var="$1" prompt="$2" default="$3" answer
-    if [ -n "${!var:-}" ]; then return; fi
-    if [ "$INTERACTIVE" = true ]; then
-        read -r -p "$prompt [$default]: " answer
-        printf -v "$var" '%s' "${answer:-$default}"
-    else
-        printf -v "$var" '%s' "$default"
+TTY=""          # where setup reads answers from; empty means no questions, defaults only
+
+prompt() {      # prompt VAR "Question" -> reads one line from the terminal into VAR
+    read -r -p "$2" "$1" < "$TTY"
+}
+
+gen_password() {  # 16 letters and digits from /dev/urandom
+    head -c 64 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | cut -c1-16
+}
+
+ask_name() {
+    if [ -n "${SERVER_NAME:-}" ]; then return; fi
+    SERVER_NAME="My Enshrouded Server"
+    if [ -z "$TTY" ]; then return; fi
+    local answer
+    prompt answer "Server name, as it shows in the server browser [$SERVER_NAME]: "
+    SERVER_NAME="${answer:-$SERVER_NAME}"
+}
+
+ask_slots() {
+    if [ -n "${SERVER_SLOTS:-}" ]; then return; fi
+    SERVER_SLOTS=16
+    if [ -z "$TTY" ]; then return; fi
+    local answer
+    while :; do
+        prompt answer "Player slots, 1 to 16 [16]: "
+        answer="${answer:-16}"
+        if [[ "$answer" =~ ^[0-9]+$ ]] && [ "$answer" -ge 1 ] && [ "$answer" -le 16 ]; then break; fi
+        warn "Enter a number from 1 to 16."
+    done
+    SERVER_SLOTS="$answer"
+}
+
+ask_secret() {  # ask_secret VAR "Question" required|optional
+    local var="$1" question="$2" mode="$3" answer
+    while :; do
+        prompt answer "$question"
+        if [ -z "$answer" ]; then
+            if [ "$mode" = optional ]; then return; fi
+            answer="$(gen_password)"
+            log "Generated: $answer"
+        fi
+        case "$answer" in
+            *\'*) warn "Single quotes don't work in .env, pick another one." ;;
+            ?|??|???) warn "Use at least 4 characters." ;;
+            *) printf -v "$var" '%s' "$answer"; return ;;
+        esac
+    done
+}
+
+# One password for players, plus an optional admin password. With an admin password the
+# player password becomes the Friend role, because Enshrouded ignores the plain server
+# password as soon as any role password is set.
+ask_passwords() {
+    if [ -n "${SERVER_PASSWORD:-}${ADMIN_PASSWORD:-}${FRIEND_PASSWORD:-}${GUEST_PASSWORD:-}" ]; then return; fi
+    if [ -z "$TTY" ]; then
+        SERVER_PASSWORD="$(gen_password)"
+        return
     fi
+    ask_secret SERVER_PASSWORD "Password players join with (Enter to generate one): " required
+    ask_secret ADMIN_PASSWORD "Admin password for you, can kick and ban (Enter to skip): " optional
+    if [ -n "${ADMIN_PASSWORD:-}" ]; then
+        if [ "$ADMIN_PASSWORD" = "$SERVER_PASSWORD" ]; then
+            warn "The admin password matches the player password, so everyone would be admin. Skipping it."
+            ADMIN_PASSWORD=""
+        else
+            FRIEND_PASSWORD="$SERVER_PASSWORD"
+            SERVER_PASSWORD=""
+        fi
+    fi
+}
+
+ask_tz() {
+    if [ -n "${TZ:-}" ]; then return; fi
+    TZ="$(cat /etc/timezone 2>/dev/null || true)"
+    if [ -z "$TZ" ]; then TZ="$(timedatectl show -p Timezone --value 2>/dev/null || true)"; fi
+    TZ="${TZ:-UTC}"
+    if [ -z "$TTY" ]; then return; fi
+    local answer
+    prompt answer "Time zone [$TZ]: "
+    TZ="${answer:-$TZ}"
 }
 
 cmd_setup() {
@@ -107,19 +179,38 @@ cmd_setup() {
         exit 0
     fi
 
-    INTERACTIVE=true
-    if [ "${1:-}" = "--yes" ] || [ ! -t 0 ]; then INTERACTIVE=false; fi
+    # Questions come from the terminal, even under curl | bash where stdin is the script.
+    # --yes or NONINTERACTIVE=1 skips them and uses the environment and defaults.
+    if [ "${1:-}" != "--yes" ] && [ "${NONINTERACTIVE:-0}" != "1" ]; then
+        if [ -t 0 ]; then TTY=/dev/stdin
+        elif (: < /dev/tty) 2>/dev/null; then TTY=/dev/tty
+        fi
+    fi
 
     local uid gid
     uid="$(id -u)"; gid="$(id -g)"
     if [ "$uid" = "0" ]; then uid="${SUDO_UID:-1000}"; gid="${SUDO_GID:-1000}"; fi
 
-    ask SERVER_NAME "Server name" "My Enshrouded Server"
-    ask SERVER_SLOTS "Player slots (1-16)" "16"
-    if [ -z "${SERVER_PASSWORD:-}${ADMIN_PASSWORD:-}${FRIEND_PASSWORD:-}${GUEST_PASSWORD:-}" ] && [ "$INTERACTIVE" = true ]; then
-        read -r -p "Server password (empty for an open server, role passwords can go in .env later): " SERVER_PASSWORD
+    ask_name
+    ask_slots
+    ask_passwords
+    ask_tz
+
+    if [ -n "$TTY" ]; then
+        echo
+        log "Server name:  $SERVER_NAME"
+        log "Slots:        $SERVER_SLOTS"
+        if [ -n "${ADMIN_PASSWORD:-}" ]; then
+            log "Players:      $FRIEND_PASSWORD (Friend role: build and open chests)"
+            log "Admin:        $ADMIN_PASSWORD"
+        else
+            log "Password:     ${SERVER_PASSWORD:-${FRIEND_PASSWORD:-}}"
+        fi
+        log "Time zone:    $TZ"
+        local confirm
+        prompt confirm "Write these settings? [Y/n]: "
+        case "${confirm,,}" in n|no) warn "Nothing written. Run ./enshrouded setup again."; exit 1 ;; esac
     fi
-    ask TZ "Time zone" "$(cat /etc/timezone 2>/dev/null || echo UTC)"
 
     cp .env.example .env
     chmod 600 .env
@@ -138,9 +229,12 @@ cmd_setup() {
     if [ "$(id -u)" = "0" ]; then chown -R "${PUID:-$uid}:${PGID:-$gid}" "${DATA_DIRS[@]}" backups .env; fi
 
     ok "Setup complete. Wrote ./.env (mode 600)"
-    if [ -z "${SERVER_PASSWORD:-}${ADMIN_PASSWORD:-}${FRIEND_PASSWORD:-}${GUEST_PASSWORD:-}" ]; then
-        warn "No password set: anyone who finds the server can join. Add one to .env before going public."
+    if [ -n "${ADMIN_PASSWORD:-}" ]; then
+        ok "Players join with: ${FRIEND_PASSWORD:-}   You join as admin with: $ADMIN_PASSWORD"
+    elif [ -n "${SERVER_PASSWORD:-}" ]; then
+        ok "Players join with the password: $SERVER_PASSWORD"
     fi
+    log "Passwords live in .env. Change them there, then run ./enshrouded update"
     log "Next: ./enshrouded start"
 }
 
@@ -247,8 +341,8 @@ cmd_help() {
 Usage: ./enshrouded <command> [args]
 
 Setup
-  setup [--yes]   First-time setup; writes .env and creates the data folders
-                  (--yes, or no terminal, takes SERVER_NAME etc. from the environment)
+  setup [--yes]   First-time setup: asks for the name, slots and passwords, writes .env
+                  (--yes takes SERVER_NAME etc. from the environment and generates a password)
 
 Lifecycle
   start           Start the server in the background and tail logs (--no-follow to skip)

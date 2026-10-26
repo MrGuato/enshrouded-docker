@@ -20,6 +20,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     STEAM_APP_ID=2278520 \
     WINEARCH=win64 \
     WINEDEBUG=-all \
+    WINEDLLOVERRIDES="mscoree,mshtml=" \
     WINEPREFIX=/home/steam/.wine \
     DISPLAY=:99
 

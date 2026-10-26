@@ -65,6 +65,16 @@ Usually a stale lock from a container that was killed. The entrypoint clears the
 ./enshrouded start
 ```
 
+## Stuck at "Creating the Wine prefix"
+
+On 1.0.0, a new Wine prefix could offer to install Wine Mono and Gecko in a dialog on the invisible display and wait forever. 1.0.1 turns those off (`WINEDLLOVERRIDES=mscoree,mshtml=`, the server needs neither) and gives up waiting after `WINE_INIT_TIMEOUT` seconds. Update, and start with a fresh prefix:
+
+```bash
+./enshrouded down
+sudo rm -rf enshrouded-wine
+./enshrouded update
+```
+
 ## Wine prefix initialization failed
 
 Delete the prefix and let the next start create a new one. It holds no saves:

@@ -38,7 +38,7 @@ cd enshrouded-docker
 
 When the log says `[Session] 'HostOnline' (up)`, your friends find the server in the in-game browser or join with `your.public.ip:15637`. That's it.
 
-Fresh Linux host with no Docker yet? One line installs Docker, opens the firewall and starts the server:
+Fresh Linux host with no Docker yet? One line installs Docker, asks for a server name and password (Enter generates one), opens the firewall and starts the server:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/MrGuato/enshrouded-docker/main/setup.sh | bash

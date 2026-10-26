@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # One-shot installer for a fresh Linux host: installs Docker if needed, clones this repo into
-# ~/enshrouded-docker, runs ./enshrouded setup without prompts, opens the firewall and starts
-# the server.
+# ~/enshrouded-docker, asks for the server name, slots and passwords, opens the firewall and
+# starts the server.
 #
 #   curl -fsSL https://raw.githubusercontent.com/MrGuato/enshrouded-docker/main/setup.sh | bash
 #
-# Settings go on the bash side of the pipe:
+# Anything set on the bash side of the pipe is used instead of asking; NONINTERACTIVE=1 asks
+# nothing and generates a password:
 #   curl -fsSL .../setup.sh | SERVER_NAME="Our World" SERVER_PASSWORD="secret" bash
 set -euo pipefail
 
@@ -103,18 +104,43 @@ open_firewall() {
     fi
 }
 
+env_value() {   # env_value KEY -> value from .env without quotes
+    sed -n "s/^$1=//p" .env 2>/dev/null | head -n 1 | sed -e "s/^'\(.*\)'\$/\1/" -e 's/^"\(.*\)"$/\1/'
+}
+
+run_setup() {
+    if [ -f .env ]; then
+        log "Keeping the existing .env"
+    elif [ "${NONINTERACTIVE:-0}" != "1" ] && (: < /dev/tty) 2>/dev/null; then
+        # stdin is this script under curl | bash, so the questions go to the terminal
+        ./enshrouded setup < /dev/tty
+    else
+        ./enshrouded setup --yes < /dev/null
+    fi
+}
+
 summary() {
-    local lan public
+    local lan public name players admin
     lan="$(hostname -I 2>/dev/null | awk '{print $1}')"
     public="$(curl -fsSL --max-time 3 https://ifconfig.me 2>/dev/null || true)"
+    name="$(env_value SERVER_NAME)"
+    admin="$(env_value ADMIN_PASSWORD)"
+    players="$(env_value SERVER_PASSWORD)"
+    if [ -z "$players" ]; then players="$(env_value FRIEND_PASSWORD)"; fi
     cat <<EOF
 
 [setup] Done. The server is starting in $INSTALL_DIR
 [setup] The first start downloads about 6 GB of game files. It is ready when the log shows
 [setup]   [Session] 'HostOnline' (up)
 [setup]
+[setup] Server name:     ${name}
+[setup] Password:        ${players:-<none>}
+EOF
+    if [ -n "$admin" ]; then echo "[setup] Admin password:  $admin"; fi
+    cat <<EOF
 [setup] LAN address:     ${lan:-<lan-ip>}:${QUERY_PORT}
 [setup] Public address:  ${public:-<public-ip>}:${QUERY_PORT} (forward ${QUERY_PORT}/udp on your router)
+[setup] Passwords and settings live in $INSTALL_DIR/.env
 [setup]
 [setup] cd $INSTALL_DIR
 [setup] ./enshrouded logs      follow the log
@@ -134,7 +160,7 @@ main() {
     check_resources
     install_docker
     get_repo
-    if [ -f .env ]; then log "Keeping the existing .env"; else ./enshrouded setup --yes < /dev/null; fi
+    run_setup
     open_firewall
     ./enshrouded start --no-follow < /dev/null
     summary
