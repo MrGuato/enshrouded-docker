@@ -1,47 +1,48 @@
 services:
   enshrouded:
-    image: ghcr.io/mrguato/enshrouded-docker:latest
-    build: .
-    container_name: enshrouded-server
+    image: ${IMAGE_REPOSITORY:-ghcr.io/mrguato/enshrouded-docker}:${IMAGE_TAG:-latest}
+    pull_policy: always
+    container_name: ${CONTAINER_NAME:-enshrouded-server}
     restart: unless-stopped
-    stop_grace_period: 30s
-
+    # The server gets Ctrl+C and up to STOP_TIMEOUT (90s) to exit; Docker waits a little longer.
+    stop_grace_period: 2m
     ports:
-      - "${QUERY_PORT:-15637}:${QUERY_PORT:-15637}/udp"
-      - "27015:27015/udp"
-
+      - "${QUERY_PORT:-15637}:${QUERY_PORT:-15637}/udp"   # players and the server browser
+      - "27015:27015/udp"                                 # Steam
+    env_file: .env
     environment:
-      PUID: "${PUID:-1000}"
-      PGID: "${PGID:-1000}"
-      TZ: "${TZ:-UTC}"
-      UPDATE_ON_START: "${UPDATE_ON_START:-1}"
-      SYNC_CONFIG_ON_START: "${SYNC_CONFIG_ON_START:-1}"
-      SERVER_NAME: "${SERVER_NAME:-My Enshrouded Server}"
-      SERVER_SLOTS: "${SERVER_SLOTS:-16}"
-      SERVER_PASSWORD: "${SERVER_PASSWORD:-}"
-      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-}"
-      FRIEND_PASSWORD: "${FRIEND_PASSWORD:-}"
-      GUEST_PASSWORD: "${GUEST_PASSWORD:-}"
-      GAME_PORT: "${GAME_PORT:-15637}"
-      QUERY_PORT: "${QUERY_PORT:-15637}"
-      ENABLE_VOICE_CHAT: "${ENABLE_VOICE_CHAT:-false}"
-      ENABLE_TEXT_CHAT: "${ENABLE_TEXT_CHAT:-false}"
-      VOICE_CHAT_MODE: "${VOICE_CHAT_MODE:-Proximity}"
-      GAME_SETTINGS_PRESET: "${GAME_SETTINGS_PRESET:-Default}"
-      DISPLAY: ":99"
-      WINEPREFIX: "/home/steam/.wine"
-
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      UPDATE_ON_START: ${UPDATE_ON_START:-true}
     volumes:
-      # Persist server config, world saves, and logs
-      - ./enshrouded-config:/home/steam/config
-      # Persist the dedicated server binaries (avoids ~6GB download on restart)
-      - ./enshrouded-server:/home/steam/server
-      # Persist Wine prefix (avoids Wine initialization overhead on restart)
-      - ./enshrouded-wine:/home/steam/.wine
-
+      - ./enshrouded-config:/home/steam/config   # enshrouded_server.json, savegame/, logs/
+      - ./enshrouded-server:/home/steam/server   # game files from SteamCMD (~6 GB, reproducible)
+      - ./enshrouded-wine:/home/steam/.wine      # Wine prefix (reproducible, saves a minute on start)
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f enshrouded_server.exe >/dev/null 2>&1 || exit 1"]
-      interval: 60s
+      test: ["CMD", "/usr/local/bin/healthcheck.sh"]
+      interval: 30s
       timeout: 10s
-      start_period: 300s
-      retries: 3
+      retries: 5
+      start_period: 15m
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: watchtower-enshrouded
+    restart: unless-stopped
+    # Runs at 05:00 every day (in TZ from .env); updates only labeled services; cleans old images.
+    # Watchtower cron has a seconds field first: "0 5 * * *" would mean every hour at minute 5.
+    command: --label-enable --cleanup --schedule "0 0 5 * * *"
+    environment:
+      TZ: ${TZ:-UTC}
+      # Docker Engine 29+ rejects the old API version watchtower's client negotiates
+      # ("client version 1.25 is too old"); pinning the API version fixes the crash loop.
+      DOCKER_API_VERSION: "1.44"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

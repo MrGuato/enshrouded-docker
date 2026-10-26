@@ -1,43 +1,50 @@
 #!/usr/bin/env bash
+# Runs as root: aligns the in-container user with PUID/PGID, fixes ownership of the
+# bind-mounted volumes, applies TZ, clears stale Xvfb locks, then drops privileges and
+# runs entrypoint.sh. PUID=0 keeps the server running as root.
 set -euo pipefail
 
 PUID="${PUID:-1000}"
 PGID="${PGID:-1000}"
+CONFIG_DIR="${CONFIG_DIR:-/home/steam/config}"
+SERVER_DIR="${SERVER_DIR:-/home/steam/server}"
+STEAMCMD_DIR="${STEAMCMD_DIR:-/opt/steamcmd}"
+WINEPREFIX="${WINEPREFIX:-/home/steam/.wine}"
 
-if [[ "$(id -u)" -eq 0 ]]; then
-  echo "[INIT] Configuring steam user (PUID=${PUID}, PGID=${PGID})..."
+log() { echo "[enshrouded] $*"; }
 
-  if [[ "$(id -g steam)" != "${PGID}" ]]; then
-    groupmod -o -g "${PGID}" steam
-  fi
-
-  if [[ "$(id -u steam)" != "${PUID}" ]]; then
-    usermod -o -u "${PUID}" -g "${PGID}" steam
-  fi
-
-  echo "[INIT] Ensuring directory existence and ownership..."
-  mkdir -p /home/steam/server /home/steam/config /home/steam/.wine /opt/steamcmd
-
-  for dir in /home/steam/server /home/steam/config /home/steam/.wine /opt/steamcmd; do
-    if [[ -d "$dir" ]]; then
-      current_uid="$(stat -c '%u' "$dir" 2>/dev/null || echo "")"
-      current_gid="$(stat -c '%g' "$dir" 2>/dev/null || echo "")"
-      if [[ "$current_uid" != "${PUID}" || "$current_gid" != "${PGID}" ]]; then
-        echo "[INIT] Fixing ownership (${PUID}:${PGID}) on $dir..."
-        chown -R "${PUID}:${PGID}" "$dir"
-      fi
-    fi
-  done
-
-  chown "${PUID}:${PGID}" /home/steam /home/steam/entrypoint.sh 2>/dev/null || true
-
-  # Clean up any stale Xvfb lock files from previous container runs
-  DISPLAY_NUM="${DISPLAY:-:99}"
-  DISPLAY_NUM="${DISPLAY_NUM#:}"
-  rm -f "/tmp/.X${DISPLAY_NUM}-lock" "/tmp/.X11-unix/X${DISPLAY_NUM}" 2>/dev/null || true
-
-  echo "[INIT] Dropping privileges to steam user..."
-  exec gosu steam /home/steam/entrypoint.sh "$@"
-else
-  exec /home/steam/entrypoint.sh "$@"
+if [ "$(id -u)" -ne 0 ]; then
+    # Container was started with --user; nothing to fix.
+    exec /usr/local/bin/entrypoint.sh "$@"
 fi
+
+if [ -n "${TZ:-}" ] && [ -f "/usr/share/zoneinfo/$TZ" ]; then
+    ln -snf "/usr/share/zoneinfo/$TZ" /etc/localtime
+    echo "$TZ" > /etc/timezone
+fi
+
+# A container that was killed leaves Xvfb's lock behind, and the next Xvfb refuses to start.
+display_num="${DISPLAY:-:99}"
+display_num="${display_num#:}"
+rm -f "/tmp/.X${display_num}-lock" "/tmp/.X11-unix/X${display_num}"
+
+mkdir -p "$CONFIG_DIR" "$SERVER_DIR" "$WINEPREFIX"
+
+if [ "$PUID" = "0" ]; then
+    log "PUID=0, running the server as root"
+    exec /usr/local/bin/entrypoint.sh "$@"
+fi
+
+if [ "$(id -g steam)" != "$PGID" ]; then groupmod -o -g "$PGID" steam; fi
+if [ "$(id -u steam)" != "$PUID" ]; then usermod -o -u "$PUID" steam; fi
+
+# chown only when the top-level owner is wrong (first start, or files left by an earlier root
+# container); recursing over ~6 GB of game files on every start would be wasteful.
+for dir in "$CONFIG_DIR" "$SERVER_DIR" "$WINEPREFIX" "$STEAMCMD_DIR" /home/steam; do
+    if [ -d "$dir" ] && { [ "$(stat -c '%u' "$dir")" != "$PUID" ] || [ "$(stat -c '%g' "$dir")" != "$PGID" ]; }; then
+        log "Fixing ownership of $dir -> $PUID:$PGID"
+        chown -R "$PUID:$PGID" "$dir"
+    fi
+done
+
+exec gosu steam /usr/local/bin/entrypoint.sh "$@"

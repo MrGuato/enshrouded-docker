@@ -1,5 +1,6 @@
 * text=auto eol=lf
 *.sh text eol=lf
-dockerfile text eol=lf
 *.yml text eol=lf
 *.yaml text eol=lf
+enshrouded text eol=lf
+Dockerfile text eol=lf

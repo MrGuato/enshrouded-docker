@@ -1,140 +1,171 @@
-[![Made With Love](https://img.shields.io/badge/Made%20with%20%E2%9D%A4%EF%B8%8F-by%20Jonathan-red)](https://github.com/MrGuato)
-[![pages-build-deployment](https://github.com/MrGuato/enshrouded-docker/actions/workflows/pages/pages-build-deployment/badge.svg)](https://mrguato.github.io/enshrouded-docker/)
-[![Build & Push (GHCR)](https://github.com/MrGuato/enshrouded-docker/actions/workflows/docker-ghcr.yml/badge.svg)](https://github.com/MrGuato/enshrouded-docker/actions/workflows/docker-ghcr.yml)
-[![GHCR](https://img.shields.io/badge/GHCR-container%20registry-blue)](https://github.com/mrguato/enshrouded-docker/pkgs/container/enshrouded-docker)
-![Visitors](https://visitor-badge.laobi.icu/badge?page_id=mrguato.enshrouded-docker)
+<p align="center">
+  <img src="docs/assets/logo.svg" width="140" alt="Enshrouded Dedicated Server logo: the Flame burning on a stone altar with two server bays, rising out of the purple Shroud">
+</p>
 
-# Enshrouded Dedicated Server (Docker)
+<h1 align="center">Enshrouded Dedicated Server</h1>
 
-A simple, one-command way to host an Enshrouded dedicated server on any Linux machine.
+<p align="center">
+  A self-hosted Enshrouded dedicated server for Linux that keeps itself patched and your world safe.<br>
+  Docker image, one CLI, real backups, no root, no Windows box required.
+</p>
 
-Whenever the container starts, it checks SteamCMD and downloads the latest Enshrouded update automatically. You don't have to rebuild the image or manually patch the server every time the game updates, and your world saves stay safely stored in a folder on your host machine.
+<p align="center">
+  <a href="https://mrguato.github.io/enshrouded-docker/"><b>Docs</b></a> ·
+  <a href="https://github.com/MrGuato/enshrouded-docker/pkgs/container/enshrouded-docker"><b>Container image</b></a> ·
+  <a href="https://github.com/MrGuato/enshrouded-docker/releases"><b>Releases</b></a> ·
+  <a href="https://github.com/MrGuato/valheim-game-server"><b>Valheim server</b></a>
+</p>
 
-📖 **[Full Setup Guide & Docs](https://mrguato.github.io/enshrouded-docker/)**
+<p align="center">
+  <a href="https://github.com/MrGuato/enshrouded-docker/releases"><img src="https://img.shields.io/github/v/release/MrGuato/enshrouded-docker" alt="Release"></a>
+  <a href="https://github.com/MrGuato/enshrouded-docker/actions/workflows/build.yml"><img src="https://github.com/MrGuato/enshrouded-docker/actions/workflows/build.yml/badge.svg" alt="Build and Publish"></a>
+  <a href="https://github.com/MrGuato/enshrouded-docker/actions/workflows/lint.yml"><img src="https://github.com/MrGuato/enshrouded-docker/actions/workflows/lint.yml/badge.svg" alt="Lint"></a>
+  <a href="https://github.com/MrGuato/enshrouded-docker/actions/workflows/security.yml"><img src="https://github.com/MrGuato/enshrouded-docker/actions/workflows/security.yml/badge.svg" alt="Security"></a>
+  <a href="https://github.com/MrGuato/enshrouded-docker/actions/workflows/github-code-scanning/codeql"><img src="https://github.com/MrGuato/enshrouded-docker/actions/workflows/github-code-scanning/codeql/badge.svg" alt="CodeQL"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/MrGuato/enshrouded-docker" alt="License: MIT"></a>
+  <a href="https://github.com/MrGuato/enshrouded-docker/commits/main"><img src="https://img.shields.io/github/last-commit/MrGuato/enshrouded-docker" alt="Last commit"></a>
+  <a href="https://github.com/MrGuato/enshrouded-docker/pkgs/container/enshrouded-docker"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2Fipitio%2Fbackage%2Fraw%2Findex%2FMrGuato%2Fenshrouded-docker%2Fenshrouded-docker.json&query=%24.downloads&label=pulls&logo=docker&logoColor=white&color=2496ed" alt="Container pulls"></a>
+</p>
 
 ---
 
-## One-Command Linux Setup
+```bash
+git clone https://github.com/MrGuato/enshrouded-docker.git
+cd enshrouded-docker
+./enshrouded setup     # asks a few questions, writes .env
+./enshrouded start     # pulls the image, downloads the game, tails the log
+```
 
-If you have a fresh Linux machine (Ubuntu, Debian, Fedora, Arch, etc.), just run this in your terminal:
+When the log says `[Session] 'HostOnline' (up)`, your friends find the server in the in-game browser or join with `your.public.ip:15637`. That's it.
+
+Fresh Linux host with no Docker yet? One line installs Docker, opens the firewall and starts the server:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/MrGuato/enshrouded-docker/main/setup.sh | bash
 ```
 
-If you want to set your server name and password right away, you can pass them in the same command:
+## Why this one
+
+Enshrouded only ships a Windows dedicated server, so on Linux it has to run under Wine. Getting that right in a container is fiddly: SteamCMD has to be forced to fetch the Windows build, Wine needs a prefix and a virtual display, Xvfb leaves lock files behind when a container dies, and saves end up buried in the game files if you aren't careful. I worked through all of it so you don't have to, and every feature below is there because I needed it.
+
+**Your world comes first**
+- Saves and config live in `./enshrouded-config`, never in the game files. Saves left in the game folder by older setups are moved over automatically.
+- `./enshrouded backup` makes a verified tarball of the world saves and server config with retention, and `./enshrouded restore` puts one back (it stops the server first so nothing overwrites it).
+- `./enshrouded stop` and Docker stops send the server Ctrl+C through Wine and give it up to 90 seconds to exit before anything gets killed.
+- Bad settings fail loudly before the game starts: slot counts, ports, the difficulty preset and the voice chat mode are checked up front, with a clear message.
+
+**Set it up once, then forget it**
+- One CLI for everything: `setup`, `start`, `status`, `logs`, `backup`, `restore`, `update`, `shell`. `make` works too.
+- The image only carries SteamCMD and Wine. The game is checked and patched on every start, so the image never goes stale when Keen ships an update. A restart is a game update.
+- Every setting lives in one `.env` file and is written into `enshrouded_server.json` on start, without touching your custom difficulty settings. Role passwords for Admin, Friend and Guest are built in.
+- Watchtower checks for a new image once a night at 05:00 and only touches this container.
+
+**Safe by default**
+- The server runs as an unprivileged user (UID 1000), not root.
+- Nothing from GitHub can reach your host: there's no self-hosted runner or deploy hook. Your host pulls a public image, and that's the only connection.
+- The image is built in the open by GitHub Actions. Every change goes through hadolint, shellcheck, CodeQL, gitleaks and Trivy (config and image scans), it's rebuilt weekly for Ubuntu and Wine security fixes, and Dependabot keeps base images and actions current.
+- The server config holds your passwords, so it's kept at mode 600 and backups are readable by their owner only.
+- Versioned releases (`IMAGE_TAG=1.0.0`) let you pin exactly what you run.
+
+### Compared with the usual options
+
+|                                   | This repo | Windows PC or VM | Rented game host |
+| --------------------------------- | :-------: | :--------------: | :--------------: |
+| Runs on a Linux box               | Yes | No | n/a |
+| Five-minute setup                 | Yes | Yes | Yes |
+| You own the world files           | Yes | Yes | Depends |
+| Game patches on restart           | Yes | Manual | Yes |
+| Backups with restore              | One command | DIY | Usually |
+| Role passwords from one file      | Yes | Edit JSON by hand | Panel |
+| Runs as non-root                  | Yes | No | n/a |
+| Monthly cost                      | Your hardware | A Windows license and your hardware | A monthly fee |
+
+This repo stays small on purpose, so you can read all of it in an evening and know what runs on your machine.
+
+## Everyday commands
 
 ```bash
-SERVER_NAME="Our Enshrouded World" SERVER_PASSWORD="myPassword123" SERVER_SLOTS=16 \
-  curl -fsSL https://raw.githubusercontent.com/MrGuato/enshrouded-docker/main/setup.sh | bash
+./enshrouded status       # container, health, server info, whether the session is online
+./enshrouded logs         # follow the log
+./enshrouded restart      # restart and pick up game patches
+./enshrouded update       # pull the newest image and recreate (also applies .env changes)
+./enshrouded backup       # verified tarball of saves and config into ./backups
+./enshrouded restore FILE # put a backup back
+./enshrouded stop         # stop cleanly
+./enshrouded shell        # shell inside the container
+./enshrouded help         # everything else
 ```
 
-### What `setup.sh` does for you:
-1. Installs `git`, `curl`, and **Docker + Docker Compose** if you don't already have them (and starts everything right away without making you log out and back in).
-2. Sets up the server folder at `~/enshrouded-docker`.
-3. Creates a `.env` file using your Linux user's permissions (`PUID`/`PGID`), so you won't run into `sudo` permission issues when backing up saves or editing configs.
-4. Opens UDP port `15637` on your Linux firewall automatically if `ufw` or `firewalld` is enabled.
-5. Pulls the image and starts the server in the background.
+## How it fits together
 
-> **First run note:** The first time the server starts, SteamCMD will download about 6 GB of game files. You can watch the progress with `cd ~/enshrouded-docker && docker compose logs -f`. Once you see `[Session] 'HostOnline' (up)`, the server is ready to join!
-
----
-
-## Manual Setup (If You Already Have Docker)
-
-If you already use Docker Compose and just want to set it up yourself:
-
-```bash
-git clone https://github.com/MrGuato/enshrouded-docker.git
-cd enshrouded-docker
-cp .env.example .env
-nano .env
-docker compose up -d
+```mermaid
+flowchart LR
+    subgraph GitHub
+      A[This repo] -->|push, tag or weekly| B[Actions: lint, scan, build]
+      B --> C[(GHCR image)]
+    end
+    subgraph Your host
+      W[Watchtower, nightly] -->|pull| C
+      W --> E[enshrouded container]
+      E -->|SteamCMD on start| S[(Steam: app 2278520)]
+      E --- X[Wine + Xvfb]
+      E --- D[(./enshrouded-config: saves and config)]
+      K[./enshrouded backup] --> D
+    end
+    P[Players] -->|UDP 15637| E
 ```
 
-Watch the logs while it downloads and boots up:
+## Requirements
 
-```bash
-docker compose logs -f
+| Component      | Minimum |
+| -------------- | ------- |
+| OS             | Ubuntu 22.04+, Debian 12+, Fedora or Arch (any x86_64 Linux with Docker should work) |
+| Docker         | 24.x or newer, with Compose v2 |
+| CPU            | 4 x86_64 cores. ARM hosts can't run it, the server needs Wine on x86_64 |
+| RAM            | 8 GB, 16 GB for a full 16-player server |
+| Disk           | 12 GB free (about 6 GB of game files plus the Wine prefix) |
+| Network        | UDP 15637 forwarded |
+
+## Documentation
+
+The full guide is at **[mrguato.github.io/enshrouded-docker](https://mrguato.github.io/enshrouded-docker/)**:
+
+- [Installation](https://mrguato.github.io/enshrouded-docker/installation.html): the one-line installer or a manual setup, to first login
+- [Configuration](https://mrguato.github.io/enshrouded-docker/configuration.html): every variable, passwords and roles, volumes and ports
+- [Updates](https://mrguato.github.io/enshrouded-docker/updates.html): game patches, image updates, pinning a release
+- [Backups](https://mrguato.github.io/enshrouded-docker/backups.html): local, scheduled, off-host, restore
+- [Security](https://mrguato.github.io/enshrouded-docker/security.html) and [Troubleshooting](https://mrguato.github.io/enshrouded-docker/troubleshooting.html)
+
+## What's in the repo
+
 ```
-
----
-
-## Changing Server Settings (`.env`)
-
-You can change your server settings inside the `.env` file (or directly in `docker-compose.yaml`), then run `docker compose up -d` to apply them. On startup, the container updates `enshrouded_server.json` with your `.env` values while keeping any custom gameplay/difficulty tweaks you've made.
-
-| Variable | Default | What it does |
-|---|---|---|
-| `SERVER_NAME` | `Enshrouded Docker Server` | The name that shows up in the in-game server browser |
-| `SERVER_SLOTS` | `16` | Max players allowed at once (`1`–`16`) |
-| `SERVER_PASSWORD` | *(empty)* | Password for everyone to join (leave blank for a public server) |
-| `ADMIN_PASSWORD` | *(empty)* | Optional password for the `Admin` role (can kick/ban, build, and open chests) |
-| `FRIEND_PASSWORD` | *(empty)* | Optional password for the `Friend` role (can build and open chests, no kick/ban) |
-| `GUEST_PASSWORD` | *(empty)* | Optional password for the `Guest` role (can explore and fight, but can't edit bases or open chests) |
-| `QUERY_PORT` | `15637` | The UDP port used to connect and query the server |
-| `ENABLE_VOICE_CHAT` | `false` | Set to `true` to turn on in-game voice chat |
-| `VOICE_CHAT_MODE` | `Proximity` | `Proximity` or `Global` |
-| `ENABLE_TEXT_CHAT` | `false` | Set to `true` to turn on in-game text chat |
-| `GAME_SETTINGS_PRESET` | `Default` | Difficulty preset: `Default`, `Relaxed`, `Hard`, `Survival`, or `Custom` |
-| `UPDATE_ON_START` | `1` | Checks Steam for game updates on start (`0` to skip) |
-| `SYNC_CONFIG_ON_START` | `1` | Syncs `.env` settings into `enshrouded_server.json` on start (`0` if you prefer editing the JSON file completely by hand) |
-| `PUID` / `PGID` | `1000` / `1000` | Your Linux user and group ID so you own the save and config files on the host |
-
----
-
-## Where Your Files & Saves Live
-
-Everything important is saved in three folders right inside `~/enshrouded-docker/`:
-
-```text
 enshrouded-docker/
-├── enshrouded-config/
-│   ├── enshrouded_server.json   ← Server config file
-│   ├── savegame/                ← Your world saves (back this folder up!)
-│   └── logs/                    ← Server logs
-├── enshrouded-server/           ← Game files downloaded by SteamCMD (~6 GB)
-└── enshrouded-wine/             ← Wine files
++-- enshrouded               The CLI (run this)
++-- setup.sh                 One-line installer for fresh hosts
++-- Dockerfile               Ubuntu 22.04 + SteamCMD + WineHQ + Xvfb
++-- docker-compose.yaml      The server (image from GHCR) + Watchtower
++-- docker-compose.dev.yml   Override for local builds
++-- docker-entrypoint.sh     Starts as root: fixes volume ownership, drops to PUID/PGID
++-- entrypoint.sh            Validates settings, updates the game, writes the config, starts it under Wine
++-- healthcheck.sh           Container health probe
++-- scripts/backup.sh        Verified tarballs with retention
++-- scripts/restore.sh       Restore from a tarball
++-- docs/                    The documentation site (Just the Docs)
++-- .github/workflows/       Build and publish, lint, security scans (CodeQL runs as GitHub default setup)
 ```
 
-### Backing up your world
+Only infrastructure code lives here: no game files, saves, server addresses or secrets. `.env` is gitignored.
 
-```bash
-cd ~/enshrouded-docker
-tar -czf "enshrouded-backup-$(date +%Y%m%d-%H%M%S).tar.gz" -C enshrouded-config savegame enshrouded_server.json
-```
+## Releases and versioning
 
----
+`latest` follows `main`. Tagged releases (`1.0.0`, `1.0`) stay put, so set `IMAGE_TAG=1.0.0` to pin one and update when you choose. What changed in each release is in the [CHANGELOG](CHANGELOG.md) and on the [releases page](https://github.com/MrGuato/enshrouded-docker/releases).
 
-## Ports & Port Forwarding
+## Contributing and security
 
-Enshrouded uses **UDP port `15637`** for both gameplay and the server browser.
-- If you are hosting on a cloud VM (AWS, Oracle, Hetzner, DigitalOcean, etc.), make sure **UDP 15637** is open in your cloud firewall / security group.
-- If you are hosting at home, forward **UDP 15637** on your router to your Linux machine's local IP address.
+Issues and pull requests are welcome. For a security problem, please follow [SECURITY.md](SECURITY.md) instead of opening a public issue.
 
----
+## License
 
-## Useful Commands
+[MIT](LICENSE). Enshrouded is a trademark of Keen Games GmbH. This project isn't affiliated with Keen Games; it downloads the official dedicated server from Steam at runtime and doesn't redistribute any game files.
 
-```bash
-# Watch live server logs
-docker compose logs -f
-
-# Restart the server (also installs any new Enshrouded game updates)
-docker compose restart
-
-# Apply changes after editing .env
-docker compose up -d
-
-# Stop the server safely (waits for world saves to finish writing)
-docker compose down
-
-# Pull the latest version of this Docker image
-docker compose pull && docker compose up -d
-```
-
----
-
-## Changelog
-
-See [CHANGELOG.md](./CHANGELOG.md) for what changed in **v0.2**.
+See you in Embervale!

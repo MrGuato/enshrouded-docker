@@ -1,4 +1,47 @@
-title: Enshrouded Dedicated Server — Automated Docker Deployment
-description: Automated Enshrouded dedicated server using Docker with SteamCMD auto-updates, immutable infrastructure, and persistent volumes.
-theme: null
-markdown: kramdown
+title: Enshrouded Dedicated Server
+description: A self-hosted Enshrouded dedicated server for Linux. Docker, one CLI, game patches on restart, backups, non-root.
+remote_theme: just-the-docs/just-the-docs
+url: https://mrguato.github.io
+baseurl: /enshrouded-docker
+logo: /assets/logo.svg
+
+color_scheme: dark
+
+aux_links:
+  GitHub:
+    - https://github.com/MrGuato/enshrouded-docker
+  Releases:
+    - https://github.com/MrGuato/enshrouded-docker/releases
+
+aux_links_new_tab: true
+
+heading_anchors: true
+
+mermaid:
+  version: "10.9.1"
+
+search_enabled: true
+search:
+  heading_level: 3
+  previews: 3
+  preview_words_before: 5
+  preview_words_after: 10
+
+footer_content: 'Built by <a href="https://github.com/MrGuato">MrGuato</a>. MIT licensed. Not affiliated with Keen Games.'
+
+plugins:
+  - jekyll-remote-theme
+  - jekyll-seo-tag
+
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - node_modules/
+  - vendor/
+
+defaults:
+  - scope:
+      path: ""
+      type: "pages"
+    values:
+      layout: default

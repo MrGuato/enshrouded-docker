@@ -1,0 +1,293 @@
+#!/usr/bin/env bash
+# Single CLI for the Enshrouded dedicated server stack. Run ./enshrouded help.
+set -euo pipefail
+
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$REPO_DIR"
+
+# DOCKER="sudo docker" works for a shell that is not in the docker group yet (setup.sh uses it).
+DOCKER="${DOCKER:-docker}"
+COMPOSE_FILES="-f docker-compose.yaml"
+SERVICE="enshrouded"
+DATA_DIRS=(enshrouded-config enshrouded-server enshrouded-wine)
+
+C_RESET='\033[0m'
+C_BOLD='\033[1m'
+C_RED='\033[31m'
+C_GREEN='\033[32m'
+C_YELLOW='\033[33m'
+C_MAGENTA='\033[35m'
+C_CYAN='\033[36m'
+
+if [ ! -t 1 ] || [ "${NO_COLOR:-0}" = "1" ]; then
+    C_RESET=''; C_BOLD=''; C_RED=''; C_GREEN=''; C_YELLOW=''; C_MAGENTA=''; C_CYAN=''
+fi
+
+log()  { printf '%b[enshrouded]%b %s\n' "$C_CYAN" "$C_RESET" "$*"; }
+ok()   { printf '%b[enshrouded]%b %s\n' "$C_GREEN" "$C_RESET" "$*"; }
+warn() { printf '%b[enshrouded]%b %s\n' "$C_YELLOW" "$C_RESET" "$*"; }
+err()  { printf '%b[enshrouded]%b %s\n' "$C_RED" "$C_RESET" "$*" >&2; }
+
+banner() {
+    printf '%b' "$C_BOLD$C_MAGENTA"
+    cat <<'BANNER'
++----------------------------------------------+
+| Enshrouded Dedicated Server  -  by MrGuato   |
++----------------------------------------------+
+BANNER
+    printf '%b\n' "$C_RESET"
+}
+
+require_env() {
+    if [ ! -f .env ]; then
+        err "Missing .env file. Run: ./enshrouded setup"
+        exit 1
+    fi
+}
+
+require_docker() {
+    if ! command -v docker >/dev/null 2>&1; then
+        err "Docker is not installed. See https://mrguato.github.io/enshrouded-docker/installation.html"
+        exit 1
+    fi
+    # shellcheck disable=SC2086
+    if ! $DOCKER compose version >/dev/null 2>&1; then
+        err "Docker Compose v2 plugin is not installed, or this user cannot reach the Docker daemon."
+        exit 1
+    fi
+}
+
+dc() {
+    # shellcheck disable=SC2086
+    $DOCKER compose $COMPOSE_FILES "$@"
+}
+
+dk() {
+    # shellcheck disable=SC2086
+    $DOCKER "$@"
+}
+
+env_value() {   # env_value KEY -> value from .env (without quotes), empty if unset
+    sed -n "s/^$1=//p" .env 2>/dev/null | head -n 1 | sed -e "s/^'\(.*\)'\$/\1/" -e 's/[[:space:]]*#.*$//' -e 's/^"\(.*\)"$/\1/'
+}
+
+set_env() {     # set_env KEY VALUE -> replace KEY=... in .env
+    local tmp value="$2"
+    # Compose reads $ as a variable and " #" as a comment; single quotes keep the value literal.
+    case "$value" in
+        *\'*) warn "$1 contains a single quote, which Docker Compose cannot read reliably. Change it in .env." ;;
+        *[\$\#\"\ ]*) value="'$value'" ;;
+    esac
+    set -- "$1" "$value"
+    tmp="$(mktemp)"
+    KEY="$1" VALUE="$2" awk 'BEGIN { k = ENVIRON["KEY"]; v = ENVIRON["VALUE"] }
+        index($0, k "=") == 1 { print k "=" v; found = 1; next } { print }
+        END { if (!found) print k "=" v }' .env > "$tmp"
+    cat "$tmp" > .env
+    rm -f "$tmp"
+}
+
+ask() {         # ask VAR "Prompt" DEFAULT -> keeps an already-exported VAR, prompts on a terminal
+    local var="$1" prompt="$2" default="$3" answer
+    if [ -n "${!var:-}" ]; then return; fi
+    if [ "$INTERACTIVE" = true ]; then
+        read -r -p "$prompt [$default]: " answer
+        printf -v "$var" '%s' "${answer:-$default}"
+    else
+        printf -v "$var" '%s' "$default"
+    fi
+}
+
+cmd_setup() {
+    banner
+    log "First-time setup"
+
+    if [ -f .env ]; then
+        warn ".env already exists. Edit it, or remove it to run setup again."
+        exit 0
+    fi
+
+    INTERACTIVE=true
+    if [ "${1:-}" = "--yes" ] || [ ! -t 0 ]; then INTERACTIVE=false; fi
+
+    local uid gid
+    uid="$(id -u)"; gid="$(id -g)"
+    if [ "$uid" = "0" ]; then uid="${SUDO_UID:-1000}"; gid="${SUDO_GID:-1000}"; fi
+
+    ask SERVER_NAME "Server name" "My Enshrouded Server"
+    ask SERVER_SLOTS "Player slots (1-16)" "16"
+    if [ -z "${SERVER_PASSWORD:-}${ADMIN_PASSWORD:-}${FRIEND_PASSWORD:-}${GUEST_PASSWORD:-}" ] && [ "$INTERACTIVE" = true ]; then
+        read -r -p "Server password (empty for an open server, role passwords can go in .env later): " SERVER_PASSWORD
+    fi
+    ask TZ "Time zone" "$(cat /etc/timezone 2>/dev/null || echo UTC)"
+
+    cp .env.example .env
+    chmod 600 .env
+    set_env SERVER_NAME "$SERVER_NAME"
+    set_env SERVER_SLOTS "$SERVER_SLOTS"
+    set_env TZ "$TZ"
+    set_env PUID "${PUID:-$uid}"
+    set_env PGID "${PGID:-$gid}"
+    local key
+    for key in SERVER_PASSWORD ADMIN_PASSWORD FRIEND_PASSWORD GUEST_PASSWORD QUERY_PORT \
+               ENABLE_VOICE_CHAT VOICE_CHAT_MODE ENABLE_TEXT_CHAT GAME_SETTINGS_PRESET IMAGE_TAG; do
+        if [ -n "${!key:-}" ]; then set_env "$key" "${!key}"; fi
+    done
+
+    mkdir -p "${DATA_DIRS[@]}" backups
+    if [ "$(id -u)" = "0" ]; then chown -R "${PUID:-$uid}:${PGID:-$gid}" "${DATA_DIRS[@]}" backups .env; fi
+
+    ok "Setup complete. Wrote ./.env (mode 600)"
+    if [ -z "${SERVER_PASSWORD:-}${ADMIN_PASSWORD:-}${FRIEND_PASSWORD:-}${GUEST_PASSWORD:-}" ]; then
+        warn "No password set: anyone who finds the server can join. Add one to .env before going public."
+    fi
+    log "Next: ./enshrouded start"
+}
+
+cmd_start() {
+    require_docker
+    require_env
+    log "Starting server"
+    dc up -d
+    if [ "${1:-}" = "--no-follow" ]; then
+        ok "Started. Follow the log with: ./enshrouded logs"
+        return
+    fi
+    ok "Started. Tailing logs (Ctrl+C to detach, the server keeps running):"
+    dc logs -f --tail 50 "$SERVICE"
+}
+
+cmd_stop() {
+    require_docker
+    log "Stopping server (it gets up to 90 seconds to shut down cleanly)"
+    dc stop "$SERVICE"
+    ok "Stopped"
+}
+
+cmd_restart() {
+    require_docker
+    log "Restarting server (also installs any new Enshrouded patch)"
+    dc restart "$SERVICE"
+    ok "Restarted"
+}
+
+cmd_down() {
+    require_docker
+    log "Removing containers (saves, config and game files persist in ./enshrouded-*)"
+    dc down
+    ok "Down"
+}
+
+cmd_logs() {
+    require_docker
+    dc logs -f --tail "${1:-100}" "$SERVICE"
+}
+
+cmd_status() {
+    require_docker
+    banner
+    dc ps
+    echo
+    local cname
+    cname="$(env_value CONTAINER_NAME)"; cname="${cname:-enshrouded-server}"
+    log "Health:   $(dk inspect --format='{{.State.Health.Status}}' "$cname" 2>/dev/null || echo 'n/a')"
+    log "Started:  $(dk inspect --format='{{.State.StartedAt}}' "$cname" 2>/dev/null || echo 'n/a')"
+    log "Image:    $(dk inspect --format='{{.Config.Image}}' "$cname" 2>/dev/null || echo 'n/a')"
+    if [ -f .env ]; then
+        echo
+        log "Server:   $(env_value SERVER_NAME)"
+        log "Slots:    $(env_value SERVER_SLOTS)   Port: $(env_value QUERY_PORT)/udp   Preset: $(env_value GAME_SETTINGS_PRESET)"
+    fi
+    # grep -c reads all input; grep -q would exit early and pipefail would report the match as a failure
+    if dk logs --tail 5000 "$cname" 2>&1 | grep -c "'HostOnline' (up)" >/dev/null; then
+        log "Session:  online (HostOnline seen in the log)"
+    else
+        log "Session:  not online yet (still downloading or starting, see ./enshrouded logs)"
+    fi
+    if [ -d enshrouded-config/savegame ]; then
+        log "Saves:    $(du -sh enshrouded-config/savegame 2>/dev/null | cut -f1) in enshrouded-config/savegame"
+    fi
+}
+
+cmd_update() {
+    require_docker
+    require_env
+    log "Pulling latest image"
+    dc pull "$SERVICE"
+    log "Recreating container (SteamCMD validates the game files on start)"
+    dc up -d "$SERVICE"
+    ok "Update started. Watch it with: ./enshrouded logs"
+}
+
+cmd_shell() {
+    require_docker
+    dc exec "$SERVICE" bash
+}
+
+cmd_backup() {
+    "$REPO_DIR/scripts/backup.sh" "$@"
+}
+
+cmd_restore() {
+    "$REPO_DIR/scripts/restore.sh" "$@"
+}
+
+cmd_build() {
+    require_docker
+    log "Building the image locally (docker-compose.dev.yml override)"
+    # shellcheck disable=SC2086
+    $DOCKER compose -f docker-compose.yaml -f docker-compose.dev.yml build "$@"
+    ok "Built. To run the local image:"
+    echo "  IMAGE_REPOSITORY=enshrouded-docker IMAGE_TAG=dev ./enshrouded start"
+}
+
+cmd_help() {
+    banner
+    cat <<HELP
+Usage: ./enshrouded <command> [args]
+
+Setup
+  setup [--yes]   First-time setup; writes .env and creates the data folders
+                  (--yes, or no terminal, takes SERVER_NAME etc. from the environment)
+
+Lifecycle
+  start           Start the server in the background and tail logs (--no-follow to skip)
+  stop            Stop the server (Ctrl+C first, so it can shut down cleanly)
+  restart         Restart the container, which also installs game patches
+  down            Remove the containers (saves and game files persist)
+
+Visibility
+  status          Show container, health, server info and whether the session is online
+  logs [N]        Tail the last N log lines (default 100)
+  shell           Open a bash shell inside the container
+
+Maintenance
+  update          Pull the latest image and recreate (SteamCMD validates game files on start)
+  build           Build the image locally from the Dockerfile
+  backup          Snapshot saves and config to ./backups (RETENTION_DAYS, BACKUP_DIR)
+  restore FILE    Restore from a backup tarball (stops and restarts the server)
+
+  help            Show this help
+HELP
+}
+
+case "${1:-help}" in
+    setup)   shift; cmd_setup   "$@" ;;
+    start)   shift; cmd_start   "$@" ;;
+    stop)    shift; cmd_stop    "$@" ;;
+    restart) shift; cmd_restart "$@" ;;
+    down)    shift; cmd_down    "$@" ;;
+    logs)    shift; cmd_logs    "$@" ;;
+    status)  shift; cmd_status  "$@" ;;
+    update)  shift; cmd_update  "$@" ;;
+    shell)   shift; cmd_shell   "$@" ;;
+    backup)  shift; cmd_backup  "$@" ;;
+    restore) shift; cmd_restore "$@" ;;
+    build)   shift; cmd_build   "$@" ;;
+    help|-h|--help) cmd_help ;;
+    *)
+        err "Unknown command: $1"
+        cmd_help
+        exit 1
+        ;;
+esac
