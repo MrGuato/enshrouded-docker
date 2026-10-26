@@ -36,6 +36,8 @@ The questions, with what pressing Enter does:
 
 Then it shows the settings and asks `Write these settings? [Y/n]`. Answering `n` writes nothing.
 
+Running the installer again on a host that already has a `.env` keeps it and skips the questions, so your settings are never overwritten. The one exception is an `.env` with no password (the 1.0.0 installer wrote those): then it offers to set one, and a server name if it is still the default.
+
 If you set an admin password, the player password becomes the Friend role (build and open chests), because Enshrouded ignores the plain server password as soon as any role password exists. Everyone types the password they were given; the server picks the role from it.
 
 ### Without questions
@@ -134,13 +136,14 @@ crontab -e
 
 See [Backups]({{ '/backups.html' | relative_url }}).
 
-## Upgrading from 0.x
+## Upgrading
 
-The folders and `.env` from 0.x keep working. From your existing checkout:
+The folders and `.env` from older versions keep working. From your existing checkout:
 
 ```bash
 git pull
+./enshrouded setup
 ./enshrouded update
 ```
 
-Old values like `UPDATE_ON_START=1` are still understood. Have a look at `.env.example` for the new options (`IMAGE_TAG`, `STOP_TIMEOUT`).
+`./enshrouded setup` leaves a `.env` alone unless it has no password; then it offers to set one. Old values like `UPDATE_ON_START=1` are still understood. Have a look at `.env.example` for newer options (`IMAGE_TAG`, `STOP_TIMEOUT`, `WINE_INIT_TIMEOUT`).
