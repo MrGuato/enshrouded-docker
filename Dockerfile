@@ -28,21 +28,28 @@ RUN dpkg --add-architecture i386 \
  && apt-get upgrade -y --no-install-recommends \
  && apt-get install -y --no-install-recommends \
       ca-certificates curl gnupg jq gosu locales procps tzdata \
-      lib32gcc-s1 winbind xvfb xauth \
+      lib32gcc-s1 lib32stdc++6 libc6:i386 winbind xvfb xauth \
  && sed -i 's/^# \(en_US.UTF-8 UTF-8\)/\1/' /etc/locale.gen \
  && locale-gen \
+ # WineHQ repo for this Ubuntu release. apt 3 only reads binary keys from a .key file, so dearmor it.
+ && . /etc/os-release \
  && install -d -m 0755 /etc/apt/keyrings \
- && curl -fsSL -o /etc/apt/keyrings/winehq-archive.key https://dl.winehq.org/wine-builds/winehq.key \
- && curl -fsSL -o /etc/apt/sources.list.d/winehq-jammy.sources https://dl.winehq.org/wine-builds/ubuntu/dists/jammy/winehq-jammy.sources \
+ && curl -fsSL https://dl.winehq.org/wine-builds/winehq.key | gpg --dearmor -o /etc/apt/keyrings/winehq-archive.key \
+ && curl -fsSL -o "/etc/apt/sources.list.d/winehq-${VERSION_CODENAME}.sources" \
+      "https://dl.winehq.org/wine-builds/ubuntu/dists/${VERSION_CODENAME}/winehq-${VERSION_CODENAME}.sources" \
  && apt-get update \
- && apt-get install -y --install-recommends winehq-stable wine-stable-amd64 wine-stable-i386:i386 \
- # Wine's recommends pull in ipp-usb, a USB printer daemon (Go) a headless server never uses;
+ && apt-get install -y --install-recommends winehq-stable \
+ # Wine's recommends can pull in ipp-usb, a USB printer daemon (Go) a headless server never uses;
  # Trivy flagged 125 Go CVEs in it
- && apt-get purge -y ipp-usb \
+ && if dpkg -s ipp-usb >/dev/null 2>&1; then apt-get purge -y ipp-usb; fi \
  && apt-get clean \
- && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+ && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* \
+ # the base image ships Canonical's pebble service manager; unused here and a CVE magnet
+ && rm -f /usr/bin/pebble
 
-RUN groupadd -g 1000 steam \
+# Ubuntu 24.04+ images ship a default "ubuntu" user on UID/GID 1000; make room for ours
+RUN (id ubuntu >/dev/null 2>&1 && userdel -r ubuntu || true) \
+ && groupadd -g 1000 steam \
  && useradd -u 1000 -g 1000 -m -s /bin/bash steam \
  && mkdir -p "$STEAMCMD_DIR" "$SERVER_DIR" "$CONFIG_DIR" "$WINEPREFIX" \
  && curl -fsSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \

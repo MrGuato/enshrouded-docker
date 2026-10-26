@@ -142,7 +142,7 @@ The full guide is at **[mrguato.github.io/enshrouded-docker](https://mrguato.git
 enshrouded-docker/
 +-- enshrouded               The CLI (run this)
 +-- setup.sh                 One-line installer for fresh hosts
-+-- Dockerfile               Ubuntu 22.04 + SteamCMD + WineHQ + Xvfb
++-- Dockerfile               Ubuntu 26.04 + SteamCMD + WineHQ + Xvfb
 +-- docker-compose.yaml      The server (image from GHCR) + Watchtower
 +-- docker-compose.dev.yml   Override for local builds
 +-- docker-entrypoint.sh     Starts as root: fixes volume ownership, drops to PUID/PGID

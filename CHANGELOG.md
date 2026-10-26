@@ -20,6 +20,7 @@ The project now works the same way as my [Valheim server](https://github.com/MrG
 - `SECURITY.md`.
 
 ### Changed
+- Base image is **Ubuntu 26.04 LTS** (was 22.04), with WineHQ's packages for that release. The WineHQ repo now follows the base image's codename, its key is stored in the binary form apt 3 expects, the default `ubuntu` user on UID 1000 is removed so `steam` keeps that id, and the unused `pebble` binary is dropped. Nothing changes on the host.
 - `setup.sh` is now a thin installer: it installs Docker if needed, clones the repo, runs `./enshrouded setup --yes` and starts the server. The whole script is read before anything runs, so `curl | bash` can't be cut short.
 - The README's inline-settings example put the variables on the `curl` side of the pipe, where they never reached the script. It's now `curl ... | SERVER_NAME=... bash`.
 - `GAME_SETTINGS_PRESET` now applies on every start, unless `enshrouded_server.json` is set to `Custom`, in which case it is never overwritten. Before, the preset in `.env` only counted the first time.
