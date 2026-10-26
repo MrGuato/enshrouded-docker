@@ -170,14 +170,43 @@ ask_tz() {
     TZ="${answer:-$TZ}"
 }
 
+# An .env without any password (1.0.0's installer wrote those) runs an open server. Offer to
+# set one, and a name if it is still the default, without touching anything else in .env.
+secure_existing_env() {
+    warn ".env has no password, so anyone who finds the server can join and edit your bases."
+    if [ -z "$TTY" ]; then
+        warn "Set SERVER_PASSWORD in .env, or run ./enshrouded setup in a terminal, then ./enshrouded update"
+        return
+    fi
+    local answer
+    prompt answer "Set a password now? [Y/n]: "
+    case "${answer,,}" in n|no) log "Leaving .env as it is"; return ;; esac
+
+    local current_name
+    current_name="$(env_value SERVER_NAME)"
+    if [ -z "$current_name" ] || [ "$current_name" = "My Enshrouded Server" ]; then
+        ask_name
+    else
+        SERVER_NAME="$current_name"
+    fi
+    ask_passwords
+
+    set_env SERVER_NAME "$SERVER_NAME"
+    local key
+    for key in SERVER_PASSWORD ADMIN_PASSWORD FRIEND_PASSWORD; do
+        set_env "$key" "${!key:-}"
+    done
+    ok "Updated .env"
+    if [ -n "${ADMIN_PASSWORD:-}" ]; then
+        ok "Players join with: ${FRIEND_PASSWORD:-}   You join as admin with: $ADMIN_PASSWORD"
+    else
+        ok "Players join with the password: ${SERVER_PASSWORD:-}"
+    fi
+    log "Apply it with: ./enshrouded update"
+}
+
 cmd_setup() {
     banner
-    log "First-time setup"
-
-    if [ -f .env ]; then
-        warn ".env already exists. Edit it, or remove it to run setup again."
-        exit 0
-    fi
 
     # Questions come from the terminal, even under curl | bash where stdin is the script.
     # --yes or NONINTERACTIVE=1 skips them and uses the environment and defaults.
@@ -186,6 +215,17 @@ cmd_setup() {
         elif (: < /dev/tty) 2>/dev/null; then TTY=/dev/tty
         fi
     fi
+
+    if [ -f .env ]; then
+        if [ -z "$(env_value SERVER_PASSWORD)$(env_value ADMIN_PASSWORD)$(env_value FRIEND_PASSWORD)$(env_value GUEST_PASSWORD)" ]; then
+            secure_existing_env
+        else
+            log ".env already exists. Edit it, or remove it to run setup again."
+        fi
+        return
+    fi
+
+    log "First-time setup"
 
     local uid gid
     uid="$(id -u)"; gid="$(id -g)"
@@ -341,7 +381,8 @@ cmd_help() {
 Usage: ./enshrouded <command> [args]
 
 Setup
-  setup [--yes]   First-time setup: asks for the name, slots and passwords, writes .env
+  setup [--yes]   First-time setup: asks for the name, slots and passwords, writes .env.
+                  With an existing .env, only offers to add a password if it has none
                   (--yes takes SERVER_NAME etc. from the environment and generates a password)
 
 Lifecycle

@@ -12,9 +12,10 @@ All notable changes to this project. Releases follow [semantic versioning](https
 - Pressing Enter at the password question generates a random 16-character password and shows it. Setting an admin password stores the player password as the Friend role, since Enshrouded ignores the plain password once a role password exists.
 - Setup shows the settings and asks before writing `.env`, and the installer's summary prints the server name and passwords.
 - `./enshrouded setup --yes` and `NONINTERACTIVE=1` generate a password instead of leaving the server open.
+- An existing `.env` with no password is no longer skipped silently. Running the installer again, or `./enshrouded setup`, offers to set a password (and a server name, if it is still the default) and changes nothing else in `.env`. Without a terminal it only prints a warning.
 
 ### Upgrading from 1.0.0
-Nothing changes for an existing `.env`. If yours has no password (the 1.0.0 installer left it empty), set `SERVER_PASSWORD` in `.env` and run `./enshrouded update`.
+Run the one-line installer again, or `git pull && ./enshrouded setup`. If your `.env` has no password (the 1.0.0 installer left it empty), it offers to set one. Then `./enshrouded update`.
 
 ## [1.0.0] - 2026-10-25
 

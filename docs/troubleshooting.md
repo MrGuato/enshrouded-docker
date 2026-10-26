@@ -65,6 +65,19 @@ Usually a stale lock from a container that was killed. The entrypoint clears the
 ./enshrouded start
 ```
 
+## The installer didn't ask for a name or password
+
+It only asks on a fresh install. With an existing `.env` it keeps your settings, and since 1.0.1 it only speaks up when that `.env` has no password. To go through all the questions again:
+
+```bash
+cd ~/enshrouded-docker
+rm .env
+./enshrouded setup
+./enshrouded update
+```
+
+Your saves are not touched; they live in `enshrouded-config/`.
+
 ## Stuck at "Creating the Wine prefix"
 
 On 1.0.0, a new Wine prefix could offer to install Wine Mono and Gecko in a dialog on the invisible display and wait forever. 1.0.1 turns those off (`WINEDLLOVERRIDES=mscoree,mshtml=`, the server needs neither) and gives up waiting after `WINE_INIT_TIMEOUT` seconds. Update, and start with a fresh prefix:

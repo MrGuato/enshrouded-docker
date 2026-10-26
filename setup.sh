@@ -108,10 +108,11 @@ env_value() {   # env_value KEY -> value from .env without quotes
     sed -n "s/^$1=//p" .env 2>/dev/null | head -n 1 | sed -e "s/^'\(.*\)'\$/\1/" -e 's/^"\(.*\)"$/\1/'
 }
 
+# A fresh install gets the full questions. An existing .env is kept as it is, unless it has no
+# password; then setup offers to set one (and a name, if it is still the default).
 run_setup() {
-    if [ -f .env ]; then
-        log "Keeping the existing .env"
-    elif [ "${NONINTERACTIVE:-0}" != "1" ] && (: < /dev/tty) 2>/dev/null; then
+    if [ -f .env ]; then log "Keeping the existing .env"; fi
+    if [ "${NONINTERACTIVE:-0}" != "1" ] && (: < /dev/tty) 2>/dev/null; then
         # stdin is this script under curl | bash, so the questions go to the terminal
         ./enshrouded setup < /dev/tty
     else
