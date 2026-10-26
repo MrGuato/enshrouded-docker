@@ -2,7 +2,7 @@
 # The image is immutable: it ships SteamCMD, Wine and Xvfb only. The game files are downloaded
 # and validated on every container start (UPDATE_ON_START=true), so the image never goes stale
 # between Enshrouded patches. Saves and config live in /home/steam/config.
-FROM ubuntu:22.04
+FROM ubuntu:26.04
 
 LABEL org.opencontainers.image.title="Enshrouded Dedicated Server" \
       org.opencontainers.image.description="Enshrouded Dedicated Server (SteamCMD + Wine) by MrGuato" \
