@@ -36,6 +36,9 @@ RUN dpkg --add-architecture i386 \
  && curl -fsSL -o /etc/apt/sources.list.d/winehq-jammy.sources https://dl.winehq.org/wine-builds/ubuntu/dists/jammy/winehq-jammy.sources \
  && apt-get update \
  && apt-get install -y --install-recommends winehq-stable wine-stable-amd64 wine-stable-i386:i386 \
+ # Wine's recommends pull in ipp-usb, a USB printer daemon (Go) a headless server never uses;
+ # Trivy flagged 125 Go CVEs in it
+ && apt-get purge -y ipp-usb \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 

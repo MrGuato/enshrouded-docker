@@ -25,7 +25,7 @@ The project now works the same way as my [Valheim server](https://github.com/MrG
 - `GAME_SETTINGS_PRESET` now applies on every start, unless `enshrouded_server.json` is set to `Custom`, in which case it is never overwritten. Before, the preset in `.env` only counted the first time.
 - `enshrouded_server.json` is kept at mode 600. A file that isn't valid JSON is kept as `.broken` instead of being overwritten silently.
 - Switches accept `true`/`false` as well as `1`/`0`. Existing `.env` files keep working.
-- The image applies Ubuntu's pending package updates at build time and is rebuilt every Monday. Date tags are no longer published; use `latest`, a release tag or `sha-` tags.
+- The image applies Ubuntu's pending package updates at build time, drops the unused ipp-usb printer daemon that Wine pulls in (Trivy flagged 125 Go CVEs in it), and is rebuilt every Monday. Date tags are no longer published; use `latest`, a release tag or `sha-` tags.
 - The entrypoint scripts moved to `/usr/local/bin`, and `dockerfile` is now `Dockerfile`.
 
 ### Removed
