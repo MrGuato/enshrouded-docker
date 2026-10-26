@@ -73,6 +73,7 @@ For individual difficulty settings (enemy health, resource drops, day length and
 | `SYNC_CONFIG_ON_START` | `true` | Write `.env` settings into `enshrouded_server.json` on start |
 | `STOP_TIMEOUT` | `90` | Seconds the server gets to exit after Ctrl+C when the container stops |
 | `STEAMCMD_RETRIES` | `3` | SteamCMD attempts before starting with what is installed |
+| `WINE_INIT_TIMEOUT` | `300` | Seconds the first-start Wine prefix creation may take before the server starts anyway |
 
 `true`/`false` and `1`/`0` both work for the switches.
 

@@ -34,6 +34,10 @@ GAME_SETTINGS_PRESET="${GAME_SETTINGS_PRESET:-Default}"
 export WINEPREFIX="${WINEPREFIX:-$HOME/.wine}"
 export WINEARCH="${WINEARCH:-win64}"
 export WINEDEBUG="${WINEDEBUG:--all}"
+# A new or upgraded prefix offers to install Wine Mono (.NET) and Gecko (HTML) in a dialog. On
+# the headless display nobody can click it, so wineboot waits forever. The server needs neither.
+export WINEDLLOVERRIDES="${WINEDLLOVERRIDES:-mscoree,mshtml=}"
+WINE_INIT_TIMEOUT="${WINE_INIT_TIMEOUT:-300}"
 export DISPLAY="${DISPLAY:-:99}"
 
 SERVER_PID=""
@@ -50,6 +54,7 @@ validate() {
     [[ "$QUERY_PORT" =~ ^[0-9]+$ ]] || die "QUERY_PORT must be a number"
     [[ "$GAME_PORT" =~ ^[0-9]+$ ]]  || die "GAME_PORT must be a number"
     [[ "$STOP_TIMEOUT" =~ ^[0-9]+$ ]] || die "STOP_TIMEOUT must be a number of seconds"
+    [[ "$WINE_INIT_TIMEOUT" =~ ^[0-9]+$ ]] || die "WINE_INIT_TIMEOUT must be a number of seconds"
     case "$VOICE_CHAT_MODE" in Proximity|Global) ;; *) die "VOICE_CHAT_MODE must be Proximity or Global" ;; esac
     case "$GAME_SETTINGS_PRESET" in
         Default|Relaxed|Hard|Survival|Custom) ;;
@@ -194,14 +199,23 @@ start_xvfb() {
     kill -0 "$XVFB_PID" 2>/dev/null || die "Xvfb failed to start on $DISPLAY"
 }
 
+# A marker, not system.reg, says the prefix is done: a start that was killed halfway leaves a
+# system.reg behind for a prefix that never finished.
 init_wine() {
-    if [ -f "$WINEPREFIX/system.reg" ]; then
+    local marker="$WINEPREFIX/.enshrouded-prefix-ready" rc=0
+    if [ -f "$marker" ]; then
         return
     fi
-    log "Creating the Wine prefix in $WINEPREFIX (first start only)"
-    wineboot --init >/dev/null 2>&1 || true
-    wineserver --wait || true
-    [ -f "$WINEPREFIX/system.reg" ] || die "Wine prefix initialization failed, $WINEPREFIX/system.reg is missing"
+    log "Creating the Wine prefix in $WINEPREFIX (first start only, up to ${WINE_INIT_TIMEOUT}s)"
+    timeout "$WINE_INIT_TIMEOUT" wineboot --init >/dev/null 2>&1 || rc=$?
+    # wineserver lingers a few seconds after the last Wine process; never wait on it forever
+    timeout 60 wineserver --wait 2>/dev/null || wineserver -k 2>/dev/null || true
+    if [ "$rc" -eq 124 ]; then
+        log "WARNING: wineboot did not finish within ${WINE_INIT_TIMEOUT}s, continuing with the prefix as it is"
+    fi
+    [ -f "$WINEPREFIX/system.reg" ] || die "Wine prefix initialization failed, $WINEPREFIX/system.reg is missing. Remove ./enshrouded-wine and start again"
+    touch "$marker"
+    log "Wine prefix ready"
 }
 
 shutdown() {
