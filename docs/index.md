@@ -28,7 +28,7 @@ cd enshrouded-docker
 
 When the log says `[Session] 'HostOnline' (up)`, players find the server in the in-game browser or join with `your.public.ip:15637`.
 
-On a fresh host without Docker, one line does all of it:
+On a fresh host without Docker, one line does all of it. It asks for a server name and password before anything starts:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/MrGuato/enshrouded-docker/main/setup.sh | bash

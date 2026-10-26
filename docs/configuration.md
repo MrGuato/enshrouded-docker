@@ -44,7 +44,9 @@ Use one password for everyone, or roles. If any role password is set, `SERVER_PA
 | `FRIEND_PASSWORD` | Friend | Build and open chests |
 | `GUEST_PASSWORD` | Guest | Explore and fight, no building or chests |
 
-Players pick their role by the password they type when joining. With no password at all, anyone who finds the server can join and edit your bases; the container logs a warning when that is the case.
+Players pick their role by the password they type when joining. `./enshrouded setup` always leaves you with a password: it asks for one, or generates one when you press Enter. With an admin password it stores the player password as `FRIEND_PASSWORD`. If you clear every password by hand, anyone who finds the server can join and edit your bases; the container logs a warning when that is the case.
+
+To change a password, edit `.env` and run `./enshrouded update`.
 
 Passwords with `$`, `#`, spaces or double quotes need single quotes in `.env` (`SERVER_PASSWORD='p@ss $word'`). `./enshrouded setup` adds them for you.
 

@@ -2,6 +2,17 @@
 
 All notable changes to this project. Releases follow [semantic versioning](https://semver.org/); image tags drop the `v` (`v1.0.0` becomes `1.0.0` and `1.0`).
 
+## [1.0.1] - 2026-10-26
+
+### Changed
+- The one-line installer now asks for the server name, player slots, a player password, an optional admin password and the time zone, and waits for the answers. It reads them from the terminal, so it works under `curl | bash` too. Before, it quietly used defaults and started an open server.
+- Pressing Enter at the password question generates a random 16-character password and shows it. Setting an admin password stores the player password as the Friend role, since Enshrouded ignores the plain password once a role password exists.
+- Setup shows the settings and asks before writing `.env`, and the installer's summary prints the server name and passwords.
+- `./enshrouded setup --yes` and `NONINTERACTIVE=1` generate a password instead of leaving the server open.
+
+### Upgrading from 1.0.0
+Nothing changes for an existing `.env`. If yours has no password (the 1.0.0 installer left it empty), set `SERVER_PASSWORD` in `.env` and run `./enshrouded update`.
+
 ## [1.0.0] - 2026-10-25
 
 The project now works the same way as my [Valheim server](https://github.com/MrGuato/valheim-game-server): one CLI, real backups, a documentation site and a scanned build pipeline.
@@ -63,5 +74,6 @@ This update focuses on making the server a true one-command install on Linux, fi
 
 - Initial public release of the Enshrouded Dedicated Server Docker image with SteamCMD auto-updates on startup and Wine64 runtime.
 
+[1.0.1]: https://github.com/MrGuato/enshrouded-docker/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/MrGuato/enshrouded-docker/compare/v0.2...v1.0.0
 [0.2]: https://github.com/MrGuato/enshrouded-docker/releases/tag/v0.2

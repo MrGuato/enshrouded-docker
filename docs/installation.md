@@ -16,20 +16,36 @@ On a fresh Ubuntu, Debian, Fedora or Arch host:
 curl -fsSL https://raw.githubusercontent.com/MrGuato/enshrouded-docker/main/setup.sh | bash
 ```
 
-To set the server name and password in the same step, put them on the `bash` side of the pipe (on the `curl` side they never reach the script):
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/MrGuato/enshrouded-docker/main/setup.sh | \
-    SERVER_NAME="Our Enshrouded World" SERVER_PASSWORD="change-me" SERVER_SLOTS=16 bash
-```
-
 The installer:
 
 1. Installs git, curl, Docker Engine and the Compose plugin if they are missing. It uses `sudo docker` for the rest of the run, so you don't have to log out and back in first.
 2. Clones this repo into `~/enshrouded-docker` (set `INSTALL_DIR` to change that), or updates it if it is already there.
-3. Runs `./enshrouded setup --yes`, which writes `.env` with your user's UID and GID so you own the files on the host.
+3. Asks a few questions in your terminal and waits for the answers (see below), then writes `.env` with your user's UID and GID so you own the files on the host.
 4. Opens UDP 15637 in `ufw` or `firewalld` when one of them is active.
-5. Starts the server and prints the LAN and public addresses.
+5. Starts the server and prints the server name, password, and LAN and public addresses.
+
+The questions, with what pressing Enter does:
+
+| Question | Enter |
+| -------- | ----- |
+| Server name | `My Enshrouded Server` |
+| Player slots, 1 to 16 | `16` |
+| Password players join with | Generates a random 16-character password and shows it |
+| Admin password for you (can kick and ban) | Skips it |
+| Time zone | The host's time zone |
+
+Then it shows the settings and asks `Write these settings? [Y/n]`. Answering `n` writes nothing.
+
+If you set an admin password, the player password becomes the Friend role (build and open chests), because Enshrouded ignores the plain server password as soon as any role password exists. Everyone types the password they were given; the server picks the role from it.
+
+### Without questions
+
+Anything you put on the `bash` side of the pipe is used instead of asking (on the `curl` side it never reaches the script). `NONINTERACTIVE=1` asks nothing at all and generates a password if you didn't give one:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/MrGuato/enshrouded-docker/main/setup.sh | \
+    NONINTERACTIVE=1 SERVER_NAME="Our Enshrouded World" SERVER_PASSWORD="change-me" SERVER_SLOTS=16 bash
+```
 
 Then skip to [Connect](#5-connect).
 
@@ -54,7 +70,7 @@ cd enshrouded-docker
 ./enshrouded setup
 ```
 
-The wizard asks for the server name, player slots, a password and your time zone. It writes `.env` (mode 600) and creates `enshrouded-config/`, `enshrouded-server/`, `enshrouded-wine/` and `backups/`. Role passwords (Admin, Friend, Guest) go in `.env` afterwards, see [Configuration]({{ '/configuration.html' | relative_url }}).
+The wizard asks the same questions as the installer: server name, player slots, the player password (Enter generates one), an optional admin password and your time zone. It writes `.env` (mode 600) and creates `enshrouded-config/`, `enshrouded-server/`, `enshrouded-wine/` and `backups/`. A Guest role password can go in `.env` afterwards, see [Configuration]({{ '/configuration.html' | relative_url }}).
 
 To skip the wizard:
 
