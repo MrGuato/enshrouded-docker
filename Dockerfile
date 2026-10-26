@@ -31,7 +31,7 @@ RUN dpkg --add-architecture i386 \
       lib32gcc-s1 winbind xvfb xauth \
  && sed -i 's/^# \(en_US.UTF-8 UTF-8\)/\1/' /etc/locale.gen \
  && locale-gen \
- && mkdir -pm755 /etc/apt/keyrings \
+ && install -d -m 0755 /etc/apt/keyrings \
  && curl -fsSL -o /etc/apt/keyrings/winehq-archive.key https://dl.winehq.org/wine-builds/winehq.key \
  && curl -fsSL -o /etc/apt/sources.list.d/winehq-jammy.sources https://dl.winehq.org/wine-builds/ubuntu/dists/jammy/winehq-jammy.sources \
  && apt-get update \
