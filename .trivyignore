@@ -1,0 +1,3 @@
+# DS002 "image user should not be root": the container starts as root on purpose so
+# docker-entrypoint.sh can fix volume ownership, then drops to PUID/PGID with gosu.
+DS002

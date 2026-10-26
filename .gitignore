@@ -1,0 +1,11 @@
+.env
+enshrouded-config/
+enshrouded-server/
+enshrouded-wine/
+backups/
+logs/
+*.log
+*.tar.gz
+.idea/
+.vscode/
+.DS_Store

@@ -1,0 +1,10 @@
+# Override for building the image locally instead of pulling from GHCR:
+#   ./enshrouded build
+#   IMAGE_REPOSITORY=enshrouded-docker IMAGE_TAG=dev ./enshrouded start
+services:
+  enshrouded:
+    image: enshrouded-docker:dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+    pull_policy: never
